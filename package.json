@@ -1,0 +1,15 @@
+{
+  "name": "audioplayer",
+  "version": "1.0.0",
+  "description": "Cross-platform music player core for Linux, Windows, and Android",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "npm run build && node --test dist/tests/**/*.test.js"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "typescript": "^5.7.2"
+  }
+}

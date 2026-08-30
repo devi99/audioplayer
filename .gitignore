@@ -1,0 +1,15 @@
+# Node
+node_modules/
+dist/
+
+# Flutter/Dart
+.dart_tool/
+.packages
+.pub-cache/
+.pub/
+build/
+
+# OS/editor
+.DS_Store
+.idea/
+.vscode/

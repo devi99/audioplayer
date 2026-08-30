@@ -8,6 +8,11 @@ dist/
 .pub-cache/
 .pub/
 build/
+.flutter-plugins
+.flutter-plugins-dependencies
+.metadata
+*.iml
+linux/x64/
 
 # OS/editor
 .DS_Store

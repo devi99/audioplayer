@@ -465,15 +465,15 @@ class _PlayScreenState extends State<PlayScreen> {
   bool _matchesTier(double rankOrder, int tier) {
     switch (tier) {
       case 1:
-        return rankOrder < 0;
-      case 2:
         return rankOrder >= 0 && rankOrder < 1;
-      case 3:
+      case 2:
         return rankOrder >= 1 && rankOrder < 2;
-      case 4:
+      case 3:
         return rankOrder >= 2 && rankOrder < 3;
+      case 4:
+        return rankOrder >= 3 && rankOrder < 4;
       case 5:
-        return rankOrder >= 3 && rankOrder <= 4;
+        return rankOrder >= 4 && rankOrder <= 5;
       default:
         return false;
     }

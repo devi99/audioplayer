@@ -24,24 +24,27 @@ class MusicTrack {
   final String? filePath;
 
   int tier() {
-    if (rankOrder < 0) {
-      return 0;
-    }
-    if (rankOrder < 1) {
+    if (rankOrder >= 0 && rankOrder < 1) {
       return 1;
     }
-    if (rankOrder < 2) {
+    if (rankOrder >= 1 && rankOrder < 2) {
       return 2;
     }
-    if (rankOrder < 3) {
+    if (rankOrder >= 2 && rankOrder < 3) {
       return 3;
     }
-    return 4;
+    if (rankOrder >= 3 && rankOrder < 4) {
+      return 4;
+    }
+    if (rankOrder >= 4 && rankOrder <= 5) {
+      return 5;
+    }
+    return 0;
   }
 
   String starDisplay() {
     final filledStars = tier();
-    final emptyStars = 4 - filledStars;
+    final emptyStars = 5 - filledStars;
     return '${'★' * filledStars}${'☆' * emptyStars}';
   }
 

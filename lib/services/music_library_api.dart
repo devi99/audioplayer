@@ -5,8 +5,17 @@ import 'package:http/http.dart' as http;
 import '../models/library_entities.dart';
 import '../models/music_track.dart';
 
+class TagOption {
+  const TagOption({required this.id, required this.name});
+
+  final int id;
+  final String name;
+}
+
 class MusicLibraryApi {
-  MusicLibraryApi({this.baseUrl = 'https://musiclibrary-api.dev.tarabora.eu', http.Client? client})
+  MusicLibraryApi(
+      {this.baseUrl = 'https://musiclibrary-api.dev.tarabora.eu',
+      http.Client? client})
       : _client = client ?? http.Client();
 
   final String baseUrl;
@@ -22,15 +31,24 @@ class MusicLibraryApi {
     );
   }
 
-  Future<List<AlbumSummary>> fetchAlbums({int pageSize = 100}) {
+  Future<List<AlbumSummary>> fetchAlbums({
+    int pageSize = 100,
+    int? artistId,
+    int? decade,
+  }) {
     return _fetchAllPages(
       path: '/api/Albums',
       pageSize: pageSize,
+      queryParameters: <String, String>{
+        if (artistId != null) 'artistId': '$artistId',
+        if (decade != null) 'decade': '$decade',
+      },
       parser: AlbumSummary.fromJson,
     );
   }
 
-  Future<List<MusicTrack>> fetchSongs({int pageNumber = 1, int pageSize = 20}) async {
+  Future<List<MusicTrack>> fetchSongs(
+      {int pageNumber = 1, int pageSize = 20}) async {
     final response = await _client.get(
       _buildUri(
         '/api/Songs',
@@ -50,8 +68,8 @@ class MusicLibraryApi {
     final decoded = jsonDecode(response.body);
     final items = decoded is List
         ? decoded
-        : (decoded as Map<String, dynamic>? ?? const <String, dynamic>{})['items']
-                as List<dynamic>? ??
+        : (decoded as Map<String, dynamic>? ??
+                const <String, dynamic>{})['items'] as List<dynamic>? ??
             const <dynamic>[];
 
     final tracks = items
@@ -72,7 +90,8 @@ class MusicLibraryApi {
     }
 
     return tracks
-        .sublist(startIndex, endIndex > tracks.length ? tracks.length : endIndex)
+        .sublist(
+            startIndex, endIndex > tracks.length ? tracks.length : endIndex)
         .toList(growable: false);
   }
 
@@ -125,6 +144,73 @@ class MusicLibraryApi {
     return tags;
   }
 
+  Future<List<TagOption>> fetchTags() async {
+    final response = await _client.get(_buildUri('/api/Tags'));
+
+    if (response.statusCode != 200) {
+      throw Exception('Failed to load /api/Tags (${response.statusCode})');
+    }
+
+    final decoded = jsonDecode(response.body);
+    if (decoded is! List) {
+      return const <TagOption>[];
+    }
+
+    final tags = <TagOption>[];
+    for (final tag in decoded) {
+      if (tag is! Map) {
+        continue;
+      }
+
+      final data = Map<String, dynamic>.from(tag);
+      final rawId = data['id'];
+      final id =
+          rawId is num ? rawId.toInt() : int.tryParse(rawId?.toString() ?? '');
+      final name = data['name']?.toString().trim() ?? '';
+      if (id != null && name.isNotEmpty) {
+        tags.add(TagOption(id: id, name: name));
+      }
+    }
+
+    return tags;
+  }
+
+  Future<void> addTagToSong(
+      {required String songId, required int tagId}) async {
+    final response = await _client.post(
+      _buildUri('/api/songs/$songId/tags'),
+      headers: const <String, String>{'Content-Type': 'application/json'},
+      body: jsonEncode(<String, dynamic>{'tagId': tagId}),
+    );
+
+    if (response.statusCode != 200) {
+      throw Exception(
+        'Failed to add tag to song $songId (${response.statusCode})',
+      );
+    }
+  }
+
+  Future<void> updateSongRankOrder({
+    required String songId,
+    required double rankOrder,
+  }) async {
+    final songNumericId = int.tryParse(songId);
+    final response = await _client.put(
+      _buildUri('/api/Songs/$songId/rankorder'),
+      headers: const <String, String>{'Content-Type': 'application/json'},
+      body: jsonEncode(<String, dynamic>{
+        if (songNumericId != null) 'id': songNumericId,
+        'rankOrder': rankOrder,
+      }),
+    );
+
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw Exception(
+        'Failed to update rank order for song $songId (${response.statusCode})',
+      );
+    }
+  }
+
   String streamSongUrl(String songId) {
     return _buildUri('/api/MusicStream/stream/$songId').toString();
   }
@@ -145,6 +231,7 @@ class MusicLibraryApi {
     required String path,
     required int pageSize,
     required T Function(Map<String, dynamic>) parser,
+    Map<String, String>? queryParameters,
   }) async {
     final items = <T>[];
     var pageNumber = 1;
@@ -156,6 +243,7 @@ class MusicLibraryApi {
           queryParameters: <String, String>{
             'pageNumber': '$pageNumber',
             'pageSize': '$pageSize',
+            ...?queryParameters,
           },
         ),
       );
@@ -238,8 +326,7 @@ class MusicLibraryApi {
       },
     );
 
-    final releases =
-        searchResult['releases'] as List<dynamic>? ?? const [];
+    final releases = searchResult['releases'] as List<dynamic>? ?? const [];
     if (releases.isEmpty) {
       return album.coverImageUrl;
     }

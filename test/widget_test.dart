@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:http/http.dart' as http;
+import 'package:http/testing.dart';
 
 import 'package:audioplayer/models/library_entities.dart';
 import 'package:audioplayer/models/music_track.dart';
@@ -210,6 +212,21 @@ void main() {
     expect(track.rankOrder, 2.5);
     expect(track.tier(), 3);
   });
+
+  test('accepts successful rank-order updates that return 204 No Content', () async {
+    final client = MockClient((request) async {
+      expect(request.method, 'PUT');
+      expect(request.url.path, '/api/Songs/42/rankorder');
+      return http.Response('', 204);
+    });
+
+    final api = MusicLibraryApi(
+      baseUrl: 'https://example.test',
+      client: client,
+    );
+
+    await api.updateSongRankOrder(songId: '42', rankOrder: 3);
+  });
 }
 
 class PageAwareMusicLibraryApi extends MusicLibraryApi {
@@ -305,7 +322,11 @@ class FakeMusicLibraryApi extends MusicLibraryApi {
   }
 
   @override
-  Future<List<AlbumSummary>> fetchAlbums({int pageSize = 100}) async {
+  Future<List<AlbumSummary>> fetchAlbums({
+    int pageSize = 100,
+    int? artistId,
+    int? decade,
+  }) async {
     return const <AlbumSummary>[
       AlbumSummary(id: 1, title: 'Night Drive', artistName: 'Aster'),
       AlbumSummary(id: 2, title: 'Daylight', artistName: 'Aster'),

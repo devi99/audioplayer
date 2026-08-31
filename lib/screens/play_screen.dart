@@ -692,17 +692,6 @@ class _PlayScreenState extends State<PlayScreen> {
           ),
           const SizedBox(height: 6),
           Text(
-            _currentlyPlaying == null
-                ? 'Now Playing: Nothing currently playing'
-                : 'Now Playing: ${_currentlyPlaying!.title} — ${_currentlyPlaying!.artist}',
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: theme.textTheme.titleMedium?.copyWith(
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-          const SizedBox(height: 6),
-          Text(
             'Select a tier to build your playback queue',
             style: theme.textTheme.bodyMedium?.copyWith(
               color: theme.colorScheme.onSurfaceVariant,

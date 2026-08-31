@@ -7,6 +7,11 @@ import 'package:flutter/material.dart';
 import '../models/music_track.dart';
 import '../services/music_library_api.dart';
 
+enum PlayFilterMode {
+  blacklist,
+  whitelist,
+}
+
 class PlayScreen extends StatefulWidget {
   const PlayScreen({super.key, required this.api});
 
@@ -21,6 +26,7 @@ class _PlayScreenState extends State<PlayScreen> {
   final Random _random = Random();
   final Map<String, List<String>> _songTagsById = <String, List<String>>{};
   final Set<String> _blacklistedTags = <String>{};
+  final Set<String> _whitelistedTags = <String>{};
 
   StreamSubscription<void>? _completionSubscription;
 
@@ -28,12 +34,13 @@ class _PlayScreenState extends State<PlayScreen> {
   List<MusicTrack> _queue = const <MusicTrack>[];
 
   bool _isLoading = true;
-  bool _isLoadingTags = false;
   bool _isPlayingQueue = false;
   bool _taggedSongsOnly = false;
+  bool _whitelistIncludeUntagged = false;
 
   int _selectedTier = 1;
   int _currentQueueIndex = -1;
+  PlayFilterMode _playFilterMode = PlayFilterMode.blacklist;
 
   MusicTrack? get _currentlyPlaying {
     if (!_isPlayingQueue ||
@@ -52,6 +59,10 @@ class _PlayScreenState extends State<PlayScreen> {
       return loadedTags;
     }
     return song.tags;
+  }
+
+  bool _hasLoadedTagsForSong(MusicTrack song) {
+    return _songTagsById.containsKey(song.id);
   }
 
   bool _isSongAllowedByBlacklist(MusicTrack song) {
@@ -76,7 +87,27 @@ class _PlayScreenState extends State<PlayScreen> {
     return _tagsForSong(song).isNotEmpty;
   }
 
+  bool _isSongAllowedByWhitelist(MusicTrack song) {
+    if (!_songTagsById.containsKey(song.id)) {
+      return false;
+    }
+
+    final songTags = _tagsForSong(song).map(_normalizeTag).toSet();
+    final hasWhitelistedTag = songTags.any(_whitelistedTags.contains);
+    final matchesNone = _whitelistIncludeUntagged && songTags.isEmpty;
+
+    if (_whitelistedTags.isEmpty && !_whitelistIncludeUntagged) {
+      return false;
+    }
+
+    return hasWhitelistedTag || matchesNone;
+  }
+
   bool _isSongAllowedByActiveFilters(MusicTrack song) {
+    if (_playFilterMode == PlayFilterMode.whitelist) {
+      return _isSongAllowedByWhitelist(song);
+    }
+
     return _isSongAllowedByBlacklist(song) && _isSongAllowedByTaggedOnly(song);
   }
 
@@ -92,6 +123,37 @@ class _PlayScreenState extends State<PlayScreen> {
         tags.putIfAbsent(normalizedTag, () => trimmedTag);
       }
     }
+    return tags;
+  }
+
+  List<MusicTrack> _songsForTier(int tier) {
+    return _allSongs
+        .where(
+          (song) =>
+              _matchesTier(song.rankOrder, tier) &&
+              (song.filePath ?? '').trim().isNotEmpty,
+        )
+        .toList(growable: false);
+  }
+
+  Map<String, String> _tierUniqueTagMap(int tier) {
+    final tags = <String, String>{};
+    for (final song in _songsForTier(tier)) {
+      if (!_songTagsById.containsKey(song.id)) {
+        continue;
+      }
+
+      for (final tag in _tagsForSong(song)) {
+        final trimmedTag = tag.trim();
+        if (trimmedTag.isEmpty) {
+          continue;
+        }
+
+        final normalizedTag = _normalizeTag(trimmedTag);
+        tags.putIfAbsent(normalizedTag, () => trimmedTag);
+      }
+    }
+
     return tags;
   }
 
@@ -130,7 +192,11 @@ class _PlayScreenState extends State<PlayScreen> {
         _isPlayingQueue = false;
       });
 
-      unawaited(_ensureTagsForQueue(_queue));
+      if (_playFilterMode == PlayFilterMode.whitelist) {
+        unawaited(_ensureTagsForSongs(_songsForTier(_selectedTier)));
+      } else {
+        unawaited(_ensureTagsForSongs(_queue));
+      }
     } catch (error) {
       if (!mounted) {
         return;
@@ -153,18 +219,13 @@ class _PlayScreenState extends State<PlayScreen> {
   }
 
   List<MusicTrack> _buildTierQueue(int tier) {
-    return _allSongs
-        .where(
-          (song) =>
-              _matchesTier(song.rankOrder, tier) &&
-              _isSongAllowedByActiveFilters(song) &&
-              (song.filePath ?? '').trim().isNotEmpty,
-        )
-        .toList();
+    return _songsForTier(tier).where(_isSongAllowedByActiveFilters).toList();
   }
 
-  Future<void> _ensureTagsForQueue(List<MusicTrack> queueSnapshot) async {
-    final missingIds = queueSnapshot
+  Future<void> _ensureTagsForSongs(
+    List<MusicTrack> songs,
+  ) async {
+    final missingIds = songs
         .map((song) => song.id)
         .where((id) => id.isNotEmpty && !_songTagsById.containsKey(id))
         .toSet()
@@ -174,31 +235,35 @@ class _PlayScreenState extends State<PlayScreen> {
       return;
     }
 
-    if (mounted) {
-      setState(() {
-        _isLoadingTags = true;
-      });
-    }
-
-    final fetchedTags = <String, List<String>>{};
     await Future.wait(
       missingIds.map((songId) async {
+        List<String> songTags;
         try {
-          fetchedTags[songId] = await widget.api.fetchSongTags(songId);
+          songTags = await widget.api.fetchSongTags(songId);
         } catch (_) {
-          fetchedTags[songId] = const <String>[];
+          songTags = const <String>[];
         }
+
+        if (!mounted) {
+          return;
+        }
+
+        setState(() {
+          _songTagsById[songId] = songTags;
+        });
       }),
     );
 
-    if (!mounted) {
+    if (_playFilterMode == PlayFilterMode.whitelist) {
+      if (!mounted) {
+        return;
+      }
+
+      setState(() {
+        _queue = _buildTierQueue(_selectedTier);
+      });
       return;
     }
-
-    setState(() {
-      _songTagsById.addAll(fetchedTags);
-      _isLoadingTags = false;
-    });
 
     if (_blacklistedTags.isNotEmpty || _taggedSongsOnly) {
       await _applyBlacklistToCurrentQueue();
@@ -309,6 +374,79 @@ class _PlayScreenState extends State<PlayScreen> {
     }
   }
 
+  Future<void> _setPlayFilterMode(PlayFilterMode mode) async {
+    if (_playFilterMode == mode) {
+      return;
+    }
+
+    setState(() {
+      _playFilterMode = mode;
+      _queue = _buildTierQueue(_selectedTier);
+      _currentQueueIndex = -1;
+      _isPlayingQueue = false;
+    });
+
+    await _player.stop();
+
+    if (!mounted) {
+      return;
+    }
+
+    if (mode == PlayFilterMode.whitelist) {
+      final tierSongs = _songsForTier(_selectedTier);
+      unawaited(_ensureTagsForSongs(tierSongs));
+      setState(() {
+        _queue = _buildTierQueue(_selectedTier);
+      });
+      return;
+    }
+
+    unawaited(_ensureTagsForSongs(_queue));
+  }
+
+  void _toggleWhitelistTag(String normalizedTag, bool selected) {
+    setState(() {
+      if (selected) {
+        _whitelistedTags.add(normalizedTag);
+      } else {
+        _whitelistedTags.remove(normalizedTag);
+      }
+
+      _queue = _buildTierQueue(_selectedTier);
+      _currentQueueIndex = -1;
+      _isPlayingQueue = false;
+    });
+
+    _player.stop();
+  }
+
+  void _toggleWhitelistNone(bool selected) {
+    setState(() {
+      _whitelistIncludeUntagged = selected;
+      _queue = _buildTierQueue(_selectedTier);
+      _currentQueueIndex = -1;
+      _isPlayingQueue = false;
+    });
+
+    _player.stop();
+  }
+
+  void _clearWhitelistSelection() {
+    if (_whitelistedTags.isEmpty && !_whitelistIncludeUntagged) {
+      return;
+    }
+
+    setState(() {
+      _whitelistedTags.clear();
+      _whitelistIncludeUntagged = false;
+      _queue = _buildTierQueue(_selectedTier);
+      _currentQueueIndex = -1;
+      _isPlayingQueue = false;
+    });
+
+    _player.stop();
+  }
+
   void _setTaggedSongsOnly(bool enabled) {
     setState(() {
       _taggedSongsOnly = enabled;
@@ -318,7 +456,7 @@ class _PlayScreenState extends State<PlayScreen> {
     });
 
     _player.stop();
-    unawaited(_ensureTagsForQueue(_queue));
+    unawaited(_ensureTagsForSongs(_queue));
   }
 
   bool _matchesTier(double rankOrder, int tier) {
@@ -501,6 +639,8 @@ class _PlayScreenState extends State<PlayScreen> {
   }
 
   void _onTierChanged(int tier) {
+    final tierSongs = _songsForTier(tier);
+
     setState(() {
       _selectedTier = tier;
       _queue = _buildTierQueue(tier);
@@ -509,14 +649,31 @@ class _PlayScreenState extends State<PlayScreen> {
     });
 
     _player.stop();
-    unawaited(_ensureTagsForQueue(_queue));
+
+    if (_playFilterMode == PlayFilterMode.whitelist) {
+      unawaited(_ensureTagsForSongs(tierSongs));
+      return;
+    }
+
+    unawaited(_ensureTagsForSongs(_queue));
   }
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final queuedUniqueTags = _queuedUniqueTagMap();
-    final sortedTagKeys = queuedUniqueTags.keys.toList()..sort();
+    final tierSongs = _songsForTier(_selectedTier);
+    final modeTagMap = _playFilterMode == PlayFilterMode.whitelist
+      ? _tierUniqueTagMap(_selectedTier)
+      : _queuedUniqueTagMap();
+    final sortedTagKeys = modeTagMap.keys.toList()..sort();
+    final tagLoadingSongs = _playFilterMode == PlayFilterMode.whitelist
+      ? tierSongs
+      : _queue;
+    final tagLoadingTotal = tagLoadingSongs.length;
+    final loadedTagCount =
+      tagLoadingSongs.where(_hasLoadedTagsForSong).length;
+    final hasPendingTagLoads =
+      tagLoadingTotal > 0 && loadedTagCount < tagLoadingTotal;
 
     if (_isLoading) {
       return const Center(child: CircularProgressIndicator());
@@ -549,6 +706,27 @@ class _PlayScreenState extends State<PlayScreen> {
             style: theme.textTheme.bodyMedium?.copyWith(
               color: theme.colorScheme.onSurfaceVariant,
             ),
+          ),
+          const SizedBox(height: 12),
+          Wrap(
+            spacing: 10,
+            runSpacing: 10,
+            children: <Widget>[
+              ChoiceChip(
+                label: const Text('Blacklist'),
+                selected: _playFilterMode == PlayFilterMode.blacklist,
+                onSelected: (_) {
+                  unawaited(_setPlayFilterMode(PlayFilterMode.blacklist));
+                },
+              ),
+              ChoiceChip(
+                label: const Text('Whitelist'),
+                selected: _playFilterMode == PlayFilterMode.whitelist,
+                onSelected: (_) {
+                  unawaited(_setPlayFilterMode(PlayFilterMode.whitelist));
+                },
+              ),
+            ],
           ),
           const SizedBox(height: 16),
           Wrap(
@@ -591,19 +769,34 @@ class _PlayScreenState extends State<PlayScreen> {
             ],
           ),
           const SizedBox(height: 10),
-          if (_isLoadingTags)
+          if (hasPendingTagLoads)
             Padding(
               padding: const EdgeInsets.only(bottom: 8),
-              child: Text(
-                'Loading song tags...',
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: theme.colorScheme.onSurfaceVariant,
-                ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: <Widget>[
+                  SizedBox(
+                    width: 14,
+                    height: 14,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: theme.colorScheme.primary,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    'Loading song tags... $loadedTagCount/$tagLoadingTotal',
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                ],
               ),
             ),
-          if (_queue.isNotEmpty ||
-              sortedTagKeys.isNotEmpty ||
-              _blacklistedTags.isNotEmpty)
+          if (_playFilterMode == PlayFilterMode.blacklist &&
+              (_queue.isNotEmpty ||
+                  sortedTagKeys.isNotEmpty ||
+                  _blacklistedTags.isNotEmpty))
             Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: <Widget>[
@@ -646,7 +839,7 @@ class _PlayScreenState extends State<PlayScreen> {
                     children: <Widget>[
                       for (final normalizedTag in sortedTagKeys)
                         FilterChip(
-                          label: Text(queuedUniqueTags[normalizedTag]!),
+                          label: Text(modeTagMap[normalizedTag]!),
                           selected: _blacklistedTags.contains(normalizedTag),
                           onSelected: (selected) async {
                             await _toggleTagBlacklist(normalizedTag, selected);
@@ -655,6 +848,60 @@ class _PlayScreenState extends State<PlayScreen> {
                     ],
                   ),
                 ],
+                const SizedBox(height: 10),
+              ],
+            ),
+          if (_playFilterMode == PlayFilterMode.whitelist &&
+              (tierSongs.isNotEmpty ||
+                  sortedTagKeys.isNotEmpty ||
+                  _whitelistedTags.isNotEmpty ||
+                  _whitelistIncludeUntagged))
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                Row(
+                  children: <Widget>[
+                    Expanded(
+                      child: Text(
+                        'Tier tags (select to whitelist)',
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                    if (_whitelistedTags.isNotEmpty || _whitelistIncludeUntagged)
+                      TextButton(
+                        onPressed: _clearWhitelistSelection,
+                        style: TextButton.styleFrom(
+                          visualDensity: VisualDensity.compact,
+                          padding: const EdgeInsets.symmetric(horizontal: 8),
+                          minimumSize: const Size(0, 30),
+                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        ),
+                        child: const Text('Clear whitelist'),
+                      ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: <Widget>[
+                    FilterChip(
+                      label: const Text('None (no tags)'),
+                      selected: _whitelistIncludeUntagged,
+                      onSelected: _toggleWhitelistNone,
+                    ),
+                    for (final normalizedTag in sortedTagKeys)
+                      FilterChip(
+                        label: Text(modeTagMap[normalizedTag]!),
+                        selected: _whitelistedTags.contains(normalizedTag),
+                        onSelected: (selected) {
+                          _toggleWhitelistTag(normalizedTag, selected);
+                        },
+                      ),
+                  ],
+                ),
                 const SizedBox(height: 10),
               ],
             ),
@@ -672,7 +919,11 @@ class _PlayScreenState extends State<PlayScreen> {
             child: _queue.isEmpty
                 ? Center(
                     child: Text(
-                      'No songs in this tier.',
+                      _playFilterMode == PlayFilterMode.whitelist &&
+                              _whitelistedTags.isEmpty &&
+                              !_whitelistIncludeUntagged
+                          ? 'Select one or more whitelist tags (or None) to build queue.'
+                          : 'No songs in this tier.',
                       style: theme.textTheme.titleMedium?.copyWith(
                         color: theme.colorScheme.onSurfaceVariant,
                       ),
@@ -686,6 +937,7 @@ class _PlayScreenState extends State<PlayScreen> {
                       final isCurrent =
                           _isPlayingQueue && index == _currentQueueIndex;
                       final songTags = _tagsForSong(song);
+                      final hasLoadedTags = _hasLoadedTagsForSong(song);
 
                       return Container(
                         padding: const EdgeInsets.symmetric(
@@ -731,16 +983,45 @@ class _PlayScreenState extends State<PlayScreen> {
                                     ),
                                   ),
                                   const SizedBox(height: 2),
-                                  Text(
-                                    songTags.isEmpty
-                                        ? 'Tags: none'
-                                        : 'Tags: ${songTags.join(', ')}',
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: theme.textTheme.bodySmall?.copyWith(
-                                      color: theme.colorScheme.onSurfaceVariant,
+                                  if (!hasLoadedTags)
+                                    Row(
+                                      children: <Widget>[
+                                        SizedBox(
+                                          width: 12,
+                                          height: 12,
+                                          child: CircularProgressIndicator(
+                                            strokeWidth: 2,
+                                            color: theme.colorScheme.primary,
+                                          ),
+                                        ),
+                                        const SizedBox(width: 6),
+                                        Expanded(
+                                          child: Text(
+                                            'Loading tags...',
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                            style: theme.textTheme.bodySmall
+                                                ?.copyWith(
+                                              color: theme
+                                                  .colorScheme.onSurfaceVariant,
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    )
+                                  else
+                                    Text(
+                                      songTags.isEmpty
+                                          ? 'Tags: none'
+                                          : 'Tags: ${songTags.join(', ')}',
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style:
+                                          theme.textTheme.bodySmall?.copyWith(
+                                        color:
+                                            theme.colorScheme.onSurfaceVariant,
+                                      ),
                                     ),
-                                  ),
                                 ],
                               ),
                             ),

@@ -2,8 +2,8 @@ import type { MusicTrack } from './musicLibraryApi.js';
 
 export interface QueueFilter {
   tags?: string[];
-  minRating?: number;
-  maxRating?: number;
+  minrankOrder?: number;
+  maxrankOrder?: number;
   limit?: number;
   offset?: number;
 }
@@ -17,19 +17,19 @@ export class AudioQueue {
 
   filterTracks(filter: QueueFilter = {}): MusicTrack[] {
     const wantedTags = (filter.tags ?? []).map((tag) => tag.toLowerCase());
-    const minRating = filter.minRating ?? 0;
-    const maxRating = filter.maxRating ?? Number.POSITIVE_INFINITY;
+    const minrankOrder = filter.minrankOrder ?? 0;
+    const maxrankOrder = filter.maxrankOrder ?? Number.POSITIVE_INFINITY;
 
     return this.tracks
       .filter((track) => {
         const matchesTags = wantedTags.length === 0 || wantedTags.every((tag) => track.tags.includes(tag));
-        const matchesRating = track.rating >= minRating && track.rating <= maxRating;
-        return matchesTags && matchesRating;
+        const matchesrankOrder = track.rankOrder >= minrankOrder && track.rankOrder <= maxrankOrder;
+        return matchesTags && matchesrankOrder;
       })
       .sort((left, right) => {
-        const byRating = right.rating - left.rating;
-        if (byRating !== 0) {
-          return byRating;
+        const byrankOrder = right.rankOrder - left.rankOrder;
+        if (byrankOrder !== 0) {
+          return byrankOrder;
         }
         return left.title.localeCompare(right.title);
       })

@@ -1,87 +1,89 @@
 import 'package:flutter/material.dart';
 
-import '../models/music_track.dart';
+import '../services/music_library_api.dart';
+import 'albums_browse_page.dart';
+import 'artists_browse_page.dart';
+import 'library_navigation_pane.dart';
+import 'songs_browse_page.dart';
 
 class LibraryScreen extends StatefulWidget {
-  const LibraryScreen({super.key, required this.tracks});
+  LibraryScreen({super.key, MusicLibraryApi? api})
+      : api = api ?? MusicLibraryApi();
 
-  final List<MusicTrack> tracks;
+  final MusicLibraryApi api;
 
   @override
   State<LibraryScreen> createState() => _LibraryScreenState();
 }
-
 class _LibraryScreenState extends State<LibraryScreen> {
-  String selectedTag = 'all';
-  int minimumRating = 3;
+  static const double _collapsedPaneWidth = 84;
+  static const double _expandedPaneWidth = 252;
 
-  List<MusicTrack> get filteredTracks {
-    return widget.tracks.where((track) {
-      final matchesTag = selectedTag == 'all' || track.tags.contains(selectedTag);
-      final matchesRating = track.rating >= minimumRating;
-      return matchesTag && matchesRating;
-    }).toList();
+  double _paneWidth = _expandedPaneWidth;
+  LibrarySection _selectedSection = LibrarySection.artists;
+
+  bool get _collapsed => _paneWidth <= 108;
+
+  void _selectSection(LibrarySection section) {
+    setState(() {
+      _selectedSection = section;
+    });
+  }
+
+  void _updatePaneWidth(double delta) {
+    setState(() {
+      _paneWidth =
+          (_paneWidth + delta).clamp(_collapsedPaneWidth, _expandedPaneWidth);
+    });
   }
 
   @override
   Widget build(BuildContext context) {
-    final tags = <String>{'all', ...widget.tracks.expand((track) => track.tags)}.toList();
-
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Music Library'),
-        actions: [
-          IconButton(
-            onPressed: () {},
-            icon: const Icon(Icons.queue_music),
+      body: DecoratedBox(
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: <Color>[
+              Color(0xFF09111D),
+              Color(0xFF0B1726),
+              Color(0xFF111826),
+            ],
           ),
-        ],
-      ),
-      body: Column(
-        children: [
-          Wrap(
-            spacing: 8,
-            children: tags.map((tag) {
-              return ChoiceChip(
-                label: Text(tag),
-                selected: selectedTag == tag,
-                onSelected: (_) => setState(() => selectedTag = tag),
-              );
-            }).toList(),
-          ),
-          Slider(
-            value: minimumRating.toDouble(),
-            min: 0,
-            max: 5,
-            divisions: 5,
-            label: 'Minimum rating: $minimumRating',
-            onChanged: (value) => setState(() => minimumRating = value.round()),
-          ),
-          Expanded(
-            child: ListView.builder(
-              itemCount: filteredTracks.length,
-              itemBuilder: (context, index) {
-                final track = filteredTracks[index];
-                return ListTile(
-                  title: Text(track.title),
-                  subtitle: Text('${track.artist} • ${track.album}'),
-                  trailing: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Icon(Icons.star, size: 18),
-                      Text('${track.rating}'),
-                    ],
-                  ),
-                  onTap: () {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text('Queued ${track.title}')),
-                    );
+        ),
+        child: SafeArea(
+          child: Row(
+            children: <Widget>[
+              LibraryNavigationPane(
+                paneWidth: _paneWidth,
+                selectedSection: _selectedSection,
+                collapsed: _collapsed,
+                onSelectSection: _selectSection,
+                onResize: (details) => _updatePaneWidth(details.delta.dx),
+              ),
+              Expanded(
+                child: AnimatedSwitcher(
+                  duration: const Duration(milliseconds: 220),
+                  child: switch (_selectedSection) {
+                    LibrarySection.artists => ArtistsBrowsePage(
+                        key: const ValueKey('artists'),
+                        api: widget.api,
+                      ),
+                    LibrarySection.albums => AlbumsBrowsePage(
+                        key: const ValueKey('albums'),
+                        api: widget.api,
+                      ),
+                    LibrarySection.songs => SongsBrowsePage(
+                        key: const ValueKey('songs'),
+                        api: widget.api,
+                      ),
                   },
-                );
-              },
-            ),
+                ),
+              ),
+            ],
           ),
-        ],
+        ),
       ),
     );
   }

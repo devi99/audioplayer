@@ -6,7 +6,7 @@ export interface MusicTrack {
   artist: string;
   album: string;
   durationSeconds: number;
-  rating: number;
+  rankOrder: number;
   tags: MusicTag[];
   streamUrl?: string;
   stream?: string;
@@ -52,7 +52,7 @@ export class MusicLibraryApiClient {
       stream: track.stream ? track.stream : undefined,
       streamUrl: track.streamUrl ?? undefined,
       tags: Array.isArray(track.tags) ? track.tags.map((tag) => tag.toLowerCase()) : [],
-      rating: Number.isFinite(track.rating) ? track.rating : 0,
+      rankOrder: Number.isFinite(track.rankOrder) ? track.rankOrder : 0,
     }));
   }
 

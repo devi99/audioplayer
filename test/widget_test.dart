@@ -1,30 +1,274 @@
-// This is a basic Flutter widget test.
-//
-// To perform an interaction with a widget in your test, use the WidgetTester
-// utility in the flutter_test package. For example, you can send tap and scroll
-// gestures. You can also use WidgetTester to find child widgets in the widget
-// tree, read text, and verify that the values of widget properties are correct.
-
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:audioplayer/main.dart';
+import 'package:audioplayer/models/library_entities.dart';
+import 'package:audioplayer/models/music_track.dart';
+import 'package:audioplayer/screens/library_screen.dart';
+import 'package:audioplayer/services/music_library_api.dart';
 
 void main() {
-  testWidgets('Counter increments smoke test', (WidgetTester tester) async {
-    // Build our app and trigger a frame.
-    await tester.pumpWidget(const MyApp());
+  testWidgets('switches between artists and albums in the navigation pane',
+      (WidgetTester tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: LibraryScreen(api: FakeMusicLibraryApi()),
+      ),
+    );
 
-    // Verify that our counter starts at 0.
-    expect(find.text('0'), findsOneWidget);
-    expect(find.text('1'), findsNothing);
+    await tester.pumpAndSettle();
 
-    // Tap the '+' icon and trigger a frame.
-    await tester.tap(find.byIcon(Icons.add));
-    await tester.pump();
+    expect(find.text('Artists'), findsWidgets);
+    expect(find.text('Albums'), findsWidgets);
+    expect(find.text('2 artists in your library'), findsOneWidget);
 
-    // Verify that our counter has incremented.
-    expect(find.text('0'), findsNothing);
-    expect(find.text('1'), findsOneWidget);
+    await tester.tap(find.text('Albums').first);
+    await tester.pumpAndSettle();
+
+    expect(find.text('2 albums in your library'), findsOneWidget);
+    expect(find.text('Night Drive'), findsOneWidget);
   });
+
+  testWidgets('shows Songs in the navigation pane and paginates song results',
+      (WidgetTester tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: LibraryScreen(api: FakeMusicLibraryApi()),
+      ),
+    );
+
+    await tester.pumpAndSettle();
+
+    expect(find.text('Songs'), findsOneWidget);
+
+    await tester.tap(find.text('Songs').first);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Songs'), findsWidgets);
+    expect(find.text('Sunset Glow'), findsOneWidget);
+    expect(find.text('Aster'), findsWidgets);
+
+    await tester.tap(find.text('Next'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Song 21'), findsOneWidget);
+  });
+
+  testWidgets('disables play for songs without a stream source',
+      (WidgetTester tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: LibraryScreen(api: BrokenStreamMusicLibraryApi()),
+      ),
+    );
+
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Songs').first);
+    await tester.pumpAndSettle();
+
+    final playButton = tester.widget<IconButton>(find.byType(IconButton).first);
+    expect(playButton.onPressed, isNull);
+  });
+
+  testWidgets('shows star rankOrders for each song tier',
+      (WidgetTester tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: LibraryScreen(api: FakeMusicLibraryApi()),
+      ),
+    );
+
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Songs').first);
+    await tester.pumpAndSettle();
+
+    expect(find.text('★★★★'), findsWidgets);
+  });
+
+  test('uses the working non-WAV stream endpoint', () {
+    final api = MusicLibraryApi();
+    expect(
+      api.streamSongUrl('2000'),
+      'https://musiclibrary-api.dev.tarabora.eu/api/MusicStream/stream/2000',
+    );
+  });
+
+  test('fetches the requested song page slice from the API response', () async {
+    final api = PageAwareMusicLibraryApi();
+
+    final pageOne = await api.fetchSongs(pageNumber: 1, pageSize: 2);
+    final pageTwo = await api.fetchSongs(pageNumber: 2, pageSize: 2);
+
+    expect(pageOne.map((song) => song.title).toList(), <String>[
+      'Track 1',
+      'Track 2',
+    ]);
+    expect(pageTwo.map((song) => song.title).toList(), <String>[
+      'Track 3',
+      'Track 4',
+    ]);
+  });
+
+  test('keeps fractional rankOrder values without truncating them', () {
+    final track = MusicTrack.fromJson({
+      'id': '42',
+      'title': 'Fractional Rank',
+      'artist': 'Tester',
+      'album': 'Demo',
+      'durationSeconds': 180,
+      'rankOrder': 2.5,
+      'tags': ['demo'],
+    });
+
+    expect(track.rankOrder, 2.5);
+    expect(track.tier(), 3);
+  });
+}
+
+class PageAwareMusicLibraryApi extends MusicLibraryApi {
+  @override
+  Future<List<MusicTrack>> fetchSongs({
+    int pageNumber = 1,
+    int pageSize = 20,
+  }) async {
+    const totalTracks = <MusicTrack>[
+      MusicTrack(
+        id: '1',
+        title: 'Track 1',
+        artist: 'A',
+        album: 'A',
+        durationSeconds: 10,
+        rankOrder: 0,
+        tags: ['t'],
+      ),
+      MusicTrack(
+        id: '2',
+        title: 'Track 2',
+        artist: 'A',
+        album: 'A',
+        durationSeconds: 10,
+        rankOrder: 0,
+        tags: ['t'],
+      ),
+      MusicTrack(
+        id: '3',
+        title: 'Track 3',
+        artist: 'A',
+        album: 'A',
+        durationSeconds: 10,
+        rankOrder: 0,
+        tags: ['t'],
+      ),
+      MusicTrack(
+        id: '4',
+        title: 'Track 4',
+        artist: 'A',
+        album: 'A',
+        durationSeconds: 10,
+        rankOrder: 0,
+        tags: ['t'],
+      ),
+    ];
+
+    final startIndex = (pageNumber - 1) * pageSize;
+    if (startIndex >= totalTracks.length) {
+      return const <MusicTrack>[];
+    }
+
+    final endIndex = startIndex + pageSize > totalTracks.length
+        ? totalTracks.length
+        : startIndex + pageSize;
+
+    return totalTracks.sublist(startIndex, endIndex).toList(growable: false);
+  }
+}
+
+class BrokenStreamMusicLibraryApi extends MusicLibraryApi {
+  @override
+  Future<List<MusicTrack>> fetchSongs({
+    int pageNumber = 1,
+    int pageSize = 20,
+  }) async {
+    return const <MusicTrack>[
+      MusicTrack(
+        id: '999999',
+        title: 'Missing Stream',
+        artist: 'Broken API',
+        album: 'No File',
+        durationSeconds: 124,
+        rankOrder: 0,
+        tags: ['broken'],
+      ),
+    ];
+  }
+
+  @override
+  String streamSongUrl(String songId) {
+    return 'https://musiclibrary-api.dev.tarabora.eu/api/MusicStream/stream-wav/$songId';
+  }
+}
+
+class FakeMusicLibraryApi extends MusicLibraryApi {
+  @override
+  Future<List<ArtistSummary>> fetchArtists({int pageSize = 100}) async {
+    return const <ArtistSummary>[
+      ArtistSummary(id: 1, name: 'Aster', albumCount: 2),
+      ArtistSummary(id: 2, name: 'Brazen', albumCount: 1),
+    ];
+  }
+
+  @override
+  Future<List<AlbumSummary>> fetchAlbums({int pageSize = 100}) async {
+    return const <AlbumSummary>[
+      AlbumSummary(id: 1, title: 'Night Drive', artistName: 'Aster'),
+      AlbumSummary(id: 2, title: 'Daylight', artistName: 'Aster'),
+    ];
+  }
+
+  @override
+  Future<List<MusicTrack>> fetchSongs({
+    int pageNumber = 1,
+    int pageSize = 20,
+  }) async {
+    final allTracks = <MusicTrack>[
+      for (var index = 1; index <= 25; index++)
+        MusicTrack(
+          id: '$index',
+          title: index == 1
+              ? 'Sunset Glow'
+              : index == 2
+                  ? 'Moonlit Echo'
+                  : 'Song $index',
+          artist: index <= 5 ? 'Aster' : 'Brazen',
+          album: index <= 10 ? 'Night Drive' : 'Daylight',
+          durationSeconds: 210,
+          rankOrder: 4,
+          tags: ['ambient'],
+        ),
+    ];
+
+    if (pageSize <= 0) {
+      return allTracks;
+    }
+
+    final startIndex = (pageNumber - 1) * pageSize;
+    if (startIndex >= allTracks.length) {
+      return const <MusicTrack>[];
+    }
+
+    final endIndex = startIndex + pageSize > allTracks.length
+        ? allTracks.length
+        : startIndex + pageSize;
+
+    return allTracks.sublist(startIndex, endIndex).toList(growable: false);
+  }
+
+  @override
+  Future<String?> lookupAlbumImage(AlbumSummary album) async {
+    return null;
+  }
+
+  @override
+  Future<String?> lookupArtistImage(String artistName) async {
+    return null;
+  }
 }

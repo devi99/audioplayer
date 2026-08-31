@@ -5,10 +5,11 @@ class MusicTrack {
     required this.artist,
     required this.album,
     required this.durationSeconds,
-    required this.rating,
+    required this.rankOrder,
     required this.tags,
     this.streamUrl,
     this.stream,
+    this.filePath,
   });
 
   final String id;
@@ -16,22 +17,55 @@ class MusicTrack {
   final String artist;
   final String album;
   final int durationSeconds;
-  final int rating;
+  final double rankOrder;
   final List<String> tags;
   final String? streamUrl;
   final String? stream;
+  final String? filePath;
+
+  int tier() {
+    if (rankOrder < 0) {
+      return 0;
+    }
+    if (rankOrder < 1) {
+      return 1;
+    }
+    if (rankOrder < 2) {
+      return 2;
+    }
+    if (rankOrder < 3) {
+      return 3;
+    }
+    return 4;
+  }
+
+  String starDisplay() {
+    final filledStars = tier();
+    final emptyStars = 4 - filledStars;
+    return '${'★' * filledStars}${'☆' * emptyStars}';
+  }
 
   factory MusicTrack.fromJson(Map<String, dynamic> json) {
+    final rawId = json['id'] ?? json['songId'];
+    final rawDuration = json['durationSeconds'] ?? json['songLength'];
+    final rawTags = json['tags'];
+
     return MusicTrack(
-      id: json['id'] as String,
-      title: json['title'] as String,
-      artist: json['artist'] as String,
-      album: json['album'] as String,
-      durationSeconds: (json['durationSeconds'] as num?)?.toInt() ?? 0,
-      rating: (json['rating'] as num?)?.toInt() ?? 0,
-      tags: List<String>.from((json['tags'] as List<dynamic>? ?? const []).map((tag) => tag.toString())),
-      streamUrl: json['streamUrl'] as String?,
-      stream: json['stream'] as String?,
+      id: rawId?.toString() ?? '',
+      title: (json['title'] ?? '').toString(),
+      artist: (json['artist'] ?? json['artistName'] ?? 'Unknown artist')
+          .toString(),
+      album: (json['album'] ?? json['albumTitle'] ?? '').toString(),
+      durationSeconds: rawDuration is num
+          ? rawDuration.toInt()
+          : int.tryParse(rawDuration?.toString() ?? '') ?? 0,
+      rankOrder: (json['rankOrder'] as num?)?.toDouble() ?? 0.0,
+      tags: rawTags is List
+          ? List<String>.from(rawTags.map((tag) => tag.toString()))
+          : const <String>[],
+      streamUrl: json['streamUrl']?.toString() ?? json['stream_url']?.toString(),
+      stream: json['stream']?.toString(),
+      filePath: json['filePath']?.toString(),
     );
   }
 
@@ -42,10 +76,11 @@ class MusicTrack {
       'artist': artist,
       'album': album,
       'durationSeconds': durationSeconds,
-      'rating': rating,
+      'rankOrder': rankOrder,
       'tags': tags,
       'streamUrl': streamUrl,
       'stream': stream,
+      'filePath': filePath,
     };
   }
 }

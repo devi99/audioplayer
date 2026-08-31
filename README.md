@@ -6,7 +6,7 @@ The app is structured around a Flutter UI layer and a shared music-library API c
 
 - connect to a `musiclibrary.api` endpoint and load decoded audio streams
 - browse a library by tag and artist/album metadata
-- filter a queue using rating and tag selection
+- filter a queue using RankOrder and tag selection
 - scroll through track lists and queue matching tracks for playback
 
 ## Repository layout

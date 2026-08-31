@@ -11,7 +11,7 @@ const library = [
     artist: 'Aster',
     album: 'Night Drive',
     durationSeconds: 245,
-    rating: 5,
+    rankOrder: 5,
     tags: ['ambient', 'night-drive'],
     stream: Buffer.from('hello-audio').toString('base64'),
   },
@@ -21,7 +21,7 @@ const library = [
     artist: 'Aster',
     album: 'Daylight',
     durationSeconds: 203,
-    rating: 4,
+    rankOrder: 4,
     tags: ['ambient', 'uplift'],
     stream: Buffer.from('second-audio').toString('base64'),
   },
@@ -31,7 +31,7 @@ const library = [
     artist: 'Brazen',
     album: 'Voltage',
     durationSeconds: 367,
-    rating: 2,
+    rankOrder: 2,
     tags: ['techno'],
     stream: Buffer.from('third-audio').toString('base64'),
   },
@@ -42,9 +42,9 @@ test('decodeTrackStream decodes base64 music payloads', () => {
   assert.equal(decoded.toString('utf8'), 'hello-audio');
 });
 
-test('AudioQueue filters by tag and rating selections', () => {
+test('AudioQueue filters by tag and rankOrder selections', () => {
   const queue = new AudioQueue(library);
-  const selected = queue.queueBySelection({ tags: ['ambient'], minRating: 4 });
+  const selected = queue.queueBySelection({ tags: ['ambient'], minrankOrder: 4 });
 
   assert.deepEqual(
     selected.map((track) => track.id),

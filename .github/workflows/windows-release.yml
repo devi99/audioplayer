@@ -39,7 +39,7 @@ jobs:
 
       - name: Upload release artifact
         uses: actions/upload-artifact@v4
-        with:0
+        with:
           name: audioplayer-windows-release
           path: |
             audioplayer-windows-release.zip

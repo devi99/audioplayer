@@ -38,7 +38,7 @@ class _PlayScreenState extends State<PlayScreen> {
   bool _taggedSongsOnly = false;
   bool _whitelistIncludeUntagged = false;
 
-  int _selectedTier = 1;
+  Set<int> _selectedTiers = <int>{};
   int _currentQueueIndex = -1;
   PlayFilterMode _playFilterMode = PlayFilterMode.blacklist;
 
@@ -126,19 +126,23 @@ class _PlayScreenState extends State<PlayScreen> {
     return tags;
   }
 
-  List<MusicTrack> _songsForTier(int tier) {
+  List<MusicTrack> _songsForTiers(Set<int> tiers) {
+    if (tiers.isEmpty) {
+      return const <MusicTrack>[];
+    }
+
     return _allSongs
         .where(
           (song) =>
-              _matchesTier(song.rankOrder, tier) &&
+              tiers.any((tier) => _matchesTier(song.rankOrder, tier)) &&
               (song.filePath ?? '').trim().isNotEmpty,
         )
         .toList(growable: false);
   }
 
-  Map<String, String> _tierUniqueTagMap(int tier) {
+  Map<String, String> _tierUniqueTagMap(Set<int> tiers) {
     final tags = <String, String>{};
-    for (final song in _songsForTier(tier)) {
+    for (final song in _songsForTiers(tiers)) {
       if (!_songTagsById.containsKey(song.id)) {
         continue;
       }
@@ -185,14 +189,14 @@ class _PlayScreenState extends State<PlayScreen> {
 
       setState(() {
         _allSongs = songs;
-        _queue = _buildTierQueue(_selectedTier);
+        _queue = _buildTierQueue(_selectedTiers);
         _isLoading = false;
         _currentQueueIndex = -1;
         _isPlayingQueue = false;
       });
 
       if (_playFilterMode == PlayFilterMode.whitelist) {
-        unawaited(_ensureTagsForSongs(_songsForTier(_selectedTier)));
+        unawaited(_ensureTagsForSongs(_songsForTiers(_selectedTiers)));
       } else {
         unawaited(_ensureTagsForSongs(_queue));
       }
@@ -217,8 +221,8 @@ class _PlayScreenState extends State<PlayScreen> {
     }
   }
 
-  List<MusicTrack> _buildTierQueue(int tier) {
-    return _songsForTier(tier).where(_isSongAllowedByActiveFilters).toList();
+  List<MusicTrack> _buildTierQueue(Set<int> tiers) {
+    return _songsForTiers(tiers).where(_isSongAllowedByActiveFilters).toList();
   }
 
   Future<void> _ensureTagsForSongs(
@@ -259,7 +263,7 @@ class _PlayScreenState extends State<PlayScreen> {
       }
 
       setState(() {
-        _queue = _buildTierQueue(_selectedTier);
+        _queue = _buildTierQueue(_selectedTiers);
       });
       return;
     }
@@ -338,7 +342,7 @@ class _PlayScreenState extends State<PlayScreen> {
       _blacklistedTags.clear();
     });
 
-    final restoredQueue = _buildTierQueue(_selectedTier);
+    final restoredQueue = _buildTierQueue(_selectedTiers);
 
     if (!_isPlayingQueue) {
       setState(() {
@@ -380,7 +384,7 @@ class _PlayScreenState extends State<PlayScreen> {
 
     setState(() {
       _playFilterMode = mode;
-      _queue = _buildTierQueue(_selectedTier);
+      _queue = _buildTierQueue(_selectedTiers);
       _currentQueueIndex = -1;
       _isPlayingQueue = false;
     });
@@ -392,10 +396,10 @@ class _PlayScreenState extends State<PlayScreen> {
     }
 
     if (mode == PlayFilterMode.whitelist) {
-      final tierSongs = _songsForTier(_selectedTier);
+      final tierSongs = _songsForTiers(_selectedTiers);
       unawaited(_ensureTagsForSongs(tierSongs));
       setState(() {
-        _queue = _buildTierQueue(_selectedTier);
+        _queue = _buildTierQueue(_selectedTiers);
       });
       return;
     }
@@ -411,7 +415,7 @@ class _PlayScreenState extends State<PlayScreen> {
         _whitelistedTags.remove(normalizedTag);
       }
 
-      _queue = _buildTierQueue(_selectedTier);
+      _queue = _buildTierQueue(_selectedTiers);
       _currentQueueIndex = -1;
       _isPlayingQueue = false;
     });
@@ -422,7 +426,7 @@ class _PlayScreenState extends State<PlayScreen> {
   void _toggleWhitelistNone(bool selected) {
     setState(() {
       _whitelistIncludeUntagged = selected;
-      _queue = _buildTierQueue(_selectedTier);
+      _queue = _buildTierQueue(_selectedTiers);
       _currentQueueIndex = -1;
       _isPlayingQueue = false;
     });
@@ -438,7 +442,7 @@ class _PlayScreenState extends State<PlayScreen> {
     setState(() {
       _whitelistedTags.clear();
       _whitelistIncludeUntagged = false;
-      _queue = _buildTierQueue(_selectedTier);
+      _queue = _buildTierQueue(_selectedTiers);
       _currentQueueIndex = -1;
       _isPlayingQueue = false;
     });
@@ -449,7 +453,7 @@ class _PlayScreenState extends State<PlayScreen> {
   void _setTaggedSongsOnly(bool enabled) {
     setState(() {
       _taggedSongsOnly = enabled;
-      _queue = _buildTierQueue(_selectedTier);
+      _queue = _buildTierQueue(_selectedTiers);
       _currentQueueIndex = -1;
       _isPlayingQueue = false;
     });
@@ -478,7 +482,13 @@ class _PlayScreenState extends State<PlayScreen> {
   Future<void> _startQueuePlayback() async {
     if (_queue.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Queue is empty for the selected tier.')),
+        SnackBar(
+          content: Text(
+            _selectedTiers.isEmpty
+                ? 'Select one or more tiers to build a queue.'
+                : 'Queue is empty for the selected tiers.',
+          ),
+        ),
       );
       return;
     }
@@ -639,12 +649,19 @@ class _PlayScreenState extends State<PlayScreen> {
     }
   }
 
-  void _onTierChanged(int tier) {
-    final tierSongs = _songsForTier(tier);
+  void _onTierChanged(int tier, bool selected) {
+    final nextSelectedTiers = Set<int>.from(_selectedTiers);
+    if (selected) {
+      nextSelectedTiers.add(tier);
+    } else {
+      nextSelectedTiers.remove(tier);
+    }
+
+    final tierSongs = _songsForTiers(nextSelectedTiers);
 
     setState(() {
-      _selectedTier = tier;
-      _queue = _buildTierQueue(tier);
+      _selectedTiers = nextSelectedTiers;
+      _queue = _buildTierQueue(nextSelectedTiers);
       _currentQueueIndex = -1;
       _isPlayingQueue = false;
     });
@@ -662,9 +679,9 @@ class _PlayScreenState extends State<PlayScreen> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final tierSongs = _songsForTier(_selectedTier);
+    final tierSongs = _songsForTiers(_selectedTiers);
     final modeTagMap = _playFilterMode == PlayFilterMode.whitelist
-      ? _tierUniqueTagMap(_selectedTier)
+      ? _tierUniqueTagMap(_selectedTiers)
       : _queuedUniqueTagMap();
     final sortedTagKeys = modeTagMap.keys.toList()..sort();
     final tagLoadingSongs = _playFilterMode == PlayFilterMode.whitelist
@@ -692,7 +709,7 @@ class _PlayScreenState extends State<PlayScreen> {
           ),
           const SizedBox(height: 6),
           Text(
-            'Select a tier to build your playback queue',
+            'Select one or more tiers to build your playback queue',
             style: theme.textTheme.bodyMedium?.copyWith(
               color: theme.colorScheme.onSurfaceVariant,
             ),
@@ -726,8 +743,8 @@ class _PlayScreenState extends State<PlayScreen> {
               for (var tier = 1; tier <= 5; tier++)
                 ChoiceChip(
                   label: Text('Tier $tier'),
-                  selected: _selectedTier == tier,
-                  onSelected: (_) => _onTierChanged(tier),
+                  selected: _selectedTiers.contains(tier),
+                  onSelected: (selected) => _onTierChanged(tier, selected),
                 ),
             ],
           ),
@@ -853,7 +870,7 @@ class _PlayScreenState extends State<PlayScreen> {
                   children: <Widget>[
                     Expanded(
                       child: Text(
-                        'Tier tags (select to whitelist)',
+                        'Selected tier tags (select to whitelist)',
                         style: theme.textTheme.bodyMedium?.copyWith(
                           fontWeight: FontWeight.w600,
                         ),
@@ -909,11 +926,13 @@ class _PlayScreenState extends State<PlayScreen> {
             child: _queue.isEmpty
                 ? Center(
                     child: Text(
-                      _playFilterMode == PlayFilterMode.whitelist &&
-                              _whitelistedTags.isEmpty &&
-                              !_whitelistIncludeUntagged
-                          ? 'Select one or more whitelist tags (or None) to build queue.'
-                          : 'No songs in this tier.',
+                      _selectedTiers.isEmpty
+                          ? 'Select one or more tiers to build queue.'
+                          : _playFilterMode == PlayFilterMode.whitelist &&
+                                  _whitelistedTags.isEmpty &&
+                                  !_whitelistIncludeUntagged
+                              ? 'Select one or more whitelist tags (or None) to build queue.'
+                              : 'No songs in the selected tiers.',
                       style: theme.textTheme.titleMedium?.copyWith(
                         color: theme.colorScheme.onSurfaceVariant,
                       ),

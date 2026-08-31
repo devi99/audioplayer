@@ -1,11 +1,11 @@
 import 'dart:async';
 import 'dart:math';
 
-import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/material.dart';
 
 import '../models/music_track.dart';
 import '../services/music_library_api.dart';
+import '../services/playback_controller.dart';
 
 enum PlayFilterMode {
   blacklist,
@@ -22,11 +22,11 @@ class PlayScreen extends StatefulWidget {
 }
 
 class _PlayScreenState extends State<PlayScreen> {
-  final AudioPlayer _player = AudioPlayer();
   final Random _random = Random();
   final Map<String, List<String>> _songTagsById = <String, List<String>>{};
   final Set<String> _blacklistedTags = <String>{};
   final Set<String> _whitelistedTags = <String>{};
+  final PlaybackController _playbackController = PlaybackController.instance;
 
   StreamSubscription<void>? _completionSubscription;
 
@@ -160,7 +160,7 @@ class _PlayScreenState extends State<PlayScreen> {
   @override
   void initState() {
     super.initState();
-    _completionSubscription = _player.onPlayerComplete.listen((_) {
+    _completionSubscription = _playbackController.onPlayerComplete.listen((_) {
       _playNextInQueue();
     });
     _loadSongs();
@@ -169,7 +169,6 @@ class _PlayScreenState extends State<PlayScreen> {
   @override
   void dispose() {
     _completionSubscription?.cancel();
-    _player.dispose();
     super.dispose();
   }
 
@@ -386,7 +385,7 @@ class _PlayScreenState extends State<PlayScreen> {
       _isPlayingQueue = false;
     });
 
-    await _player.stop();
+    await _playbackController.stop();
 
     if (!mounted) {
       return;
@@ -417,7 +416,7 @@ class _PlayScreenState extends State<PlayScreen> {
       _isPlayingQueue = false;
     });
 
-    _player.stop();
+    unawaited(_playbackController.stop());
   }
 
   void _toggleWhitelistNone(bool selected) {
@@ -428,7 +427,7 @@ class _PlayScreenState extends State<PlayScreen> {
       _isPlayingQueue = false;
     });
 
-    _player.stop();
+    unawaited(_playbackController.stop());
   }
 
   void _clearWhitelistSelection() {
@@ -444,7 +443,7 @@ class _PlayScreenState extends State<PlayScreen> {
       _isPlayingQueue = false;
     });
 
-    _player.stop();
+    unawaited(_playbackController.stop());
   }
 
   void _setTaggedSongsOnly(bool enabled) {
@@ -455,7 +454,7 @@ class _PlayScreenState extends State<PlayScreen> {
       _isPlayingQueue = false;
     });
 
-    _player.stop();
+    unawaited(_playbackController.stop());
     unawaited(_ensureTagsForSongs(_queue));
   }
 
@@ -503,8 +502,10 @@ class _PlayScreenState extends State<PlayScreen> {
     final track = _queue[_currentQueueIndex];
 
     try {
-      await _player.stop();
-      await _player.play(UrlSource(widget.api.streamSongUrl(track.id)));
+      await _playbackController.playTrack(
+        track: track,
+        streamUrl: widget.api.streamSongUrl(track.id),
+      );
     } catch (_) {
       if (!mounted) {
         return;
@@ -536,7 +537,7 @@ class _PlayScreenState extends State<PlayScreen> {
   }
 
   Future<void> _stopQueuePlayback() async {
-    await _player.stop();
+    await _playbackController.stop();
     if (!mounted) {
       return;
     }
@@ -648,7 +649,7 @@ class _PlayScreenState extends State<PlayScreen> {
       _isPlayingQueue = false;
     });
 
-    _player.stop();
+    unawaited(_playbackController.stop());
 
     if (_playFilterMode == PlayFilterMode.whitelist) {
       unawaited(_ensureTagsForSongs(tierSongs));

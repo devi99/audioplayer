@@ -1,8 +1,8 @@
-import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/material.dart';
 
 import '../models/music_track.dart';
 import '../services/music_library_api.dart';
+import '../services/playback_controller.dart';
 import 'shared_library_widgets.dart';
 
 class SongsBrowsePage extends StatefulWidget {
@@ -16,7 +16,6 @@ class SongsBrowsePage extends StatefulWidget {
 
 class _SongsBrowsePageState extends State<SongsBrowsePage> {
   static const int _pageSize = 20;
-  static final AudioPlayer _sharedPlayer = AudioPlayer();
 
   late final Future<List<MusicTrack>> _songsFuture;
   int _pageNumber = 1;
@@ -40,8 +39,10 @@ class _SongsBrowsePageState extends State<SongsBrowsePage> {
     }
 
     try {
-      await _sharedPlayer.stop();
-      await _sharedPlayer.play(UrlSource(widget.api.streamSongUrl(song.id)));
+      await PlaybackController.instance.playTrack(
+        track: song,
+        streamUrl: widget.api.streamSongUrl(song.id),
+      );
     } catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(

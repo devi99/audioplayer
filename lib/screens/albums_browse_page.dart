@@ -22,14 +22,25 @@ class _AlbumsBrowsePageState extends State<AlbumsBrowsePage> {
 
   late Future<List<AlbumSummary>> _albumsFuture;
   late Future<List<ArtistSummary>> _artistsFuture;
+  late final TextEditingController _artistFieldController;
+  late final FocusNode _artistFieldFocusNode;
   int? _selectedArtistId;
   int? _selectedDecade;
 
   @override
   void initState() {
     super.initState();
+    _artistFieldController = TextEditingController(text: 'All artists');
+    _artistFieldFocusNode = FocusNode();
     _artistsFuture = widget.api.fetchArtists();
     _reloadAlbums();
+  }
+
+  @override
+  void dispose() {
+    _artistFieldController.dispose();
+    _artistFieldFocusNode.dispose();
+    super.dispose();
   }
 
   static List<int> _buildDecadeOptions() {
@@ -49,6 +60,22 @@ class _AlbumsBrowsePageState extends State<AlbumsBrowsePage> {
     );
   }
 
+  void _applyArtistFilter(int? artistId, List<ArtistSummary> artists) {
+    if (_selectedArtistId == artistId) {
+      return;
+    }
+    final selectedArtist = artists
+        .where((artist) => artist.id == artistId)
+        .cast<ArtistSummary?>()
+        .firstWhere((artist) => artist != null, orElse: () => null);
+
+    setState(() {
+      _selectedArtistId = artistId;
+      _artistFieldController.text = selectedArtist?.name ?? 'All artists';
+      _reloadAlbums();
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -63,6 +90,16 @@ class _AlbumsBrowsePageState extends State<AlbumsBrowsePage> {
         final hasSelectedArtist =
             artists.any((artist) => artist.id == _selectedArtistId);
         final selectedArtistId = hasSelectedArtist ? _selectedArtistId : null;
+        final selectedArtistName = selectedArtistId == null
+          ? 'All artists'
+          : artists
+            .firstWhere((artist) => artist.id == selectedArtistId)
+            .name;
+
+        if (_artistFieldController.text != selectedArtistName &&
+          !_artistFieldFocusNode.hasFocus) {
+          _artistFieldController.text = selectedArtistName;
+        }
 
         return FutureBuilder<List<AlbumSummary>>(
           future: _albumsFuture,
@@ -151,43 +188,108 @@ class _AlbumsBrowsePageState extends State<AlbumsBrowsePage> {
                           ),
                           SizedBox(
                             width: artistWidth,
-                            child: DropdownButtonFormField<int?>(
-                              initialValue: selectedArtistId,
-                              isDense: true,
-                              isExpanded: true,
-                              decoration: const InputDecoration(
-                                labelText: 'Artist',
-                                border: OutlineInputBorder(),
-                              ),
-                              items: <DropdownMenuItem<int?>>[
-                                const DropdownMenuItem<int?>(
-                                  value: null,
-                                  child: Text(
-                                    'All artists',
-                                    overflow: TextOverflow.ellipsis,
+                            child: RawAutocomplete<_ArtistFilterOption>(
+                              textEditingController: _artistFieldController,
+                              focusNode: _artistFieldFocusNode,
+                              displayStringForOption: (option) => option.label,
+                              optionsBuilder: (textEditingValue) {
+                                if (artistSnapshot.hasError) {
+                                  return const Iterable<_ArtistFilterOption>.empty();
+                                }
+                                final query =
+                                    textEditingValue.text.trim().toLowerCase();
+                                final options = <_ArtistFilterOption>[
+                                  const _ArtistFilterOption(
+                                    artistId: null,
+                                    label: 'All artists',
                                   ),
-                                ),
-                                for (final artist in artists)
-                                  DropdownMenuItem<int?>(
-                                    value: artist.id,
-                                    child: Text(
-                                      artist.name,
-                                      overflow: TextOverflow.ellipsis,
-                                      maxLines: 1,
+                                  ...artists.map(
+                                    (artist) => _ArtistFilterOption(
+                                      artistId: artist.id,
+                                      label: artist.name,
                                     ),
                                   ),
-                              ],
-                              onChanged: artistSnapshot.hasError
-                                  ? null
-                                  : (value) {
-                                      if (_selectedArtistId == value) {
-                                        return;
-                                      }
-                                      setState(() {
-                                        _selectedArtistId = value;
-                                        _reloadAlbums();
-                                      });
-                                    },
+                                ];
+                                if (query.isEmpty) {
+                                  return options;
+                                }
+                                return options.where(
+                                  (option) =>
+                                      option.label.toLowerCase().contains(query),
+                                );
+                              },
+                              onSelected: (option) {
+                                _applyArtistFilter(option.artistId, artists);
+                              },
+                              fieldViewBuilder: (context, controller, focusNode,
+                                  onFieldSubmitted) {
+                                return TextFormField(
+                                  controller: controller,
+                                  focusNode: focusNode,
+                                  enabled: !artistSnapshot.hasError,
+                                  onTapOutside: (_) {
+                                    focusNode.unfocus();
+                                  },
+                                  onFieldSubmitted: (_) {
+                                    onFieldSubmitted();
+                                  },
+                                  decoration: InputDecoration(
+                                    labelText: 'Artist',
+                                    hintText: 'Type to filter artists',
+                                    border: const OutlineInputBorder(),
+                                    prefixIcon:
+                                        const Icon(Icons.search_rounded),
+                                    suffixIcon: selectedArtistId == null
+                                        ? null
+                                        : IconButton(
+                                            tooltip: 'Clear artist filter',
+                                            icon: const Icon(
+                                              Icons.clear_rounded,
+                                            ),
+                                            onPressed: () {
+                                              _applyArtistFilter(
+                                                null,
+                                                artists,
+                                              );
+                                              focusNode.unfocus();
+                                            },
+                                          ),
+                                  ),
+                                );
+                              },
+                              optionsViewBuilder:
+                                  (context, onSelected, options) {
+                                return Align(
+                                  alignment: Alignment.topLeft,
+                                  child: Material(
+                                    elevation: 8,
+                                    borderRadius: BorderRadius.circular(12),
+                                    child: ConstrainedBox(
+                                      constraints: const BoxConstraints(
+                                        maxHeight: 280,
+                                        minWidth: 260,
+                                      ),
+                                      child: ListView.builder(
+                                        padding: EdgeInsets.zero,
+                                        shrinkWrap: true,
+                                        itemCount: options.length,
+                                        itemBuilder: (context, index) {
+                                          final option = options.elementAt(index);
+                                          return ListTile(
+                                            dense: true,
+                                            title: Text(
+                                              option.label,
+                                              maxLines: 1,
+                                              overflow: TextOverflow.ellipsis,
+                                            ),
+                                            onTap: () => onSelected(option),
+                                          );
+                                        },
+                                      ),
+                                    ),
+                                  ),
+                                );
+                              },
                             ),
                           ),
                           if (_selectedDecade != null ||
@@ -197,6 +299,7 @@ class _AlbumsBrowsePageState extends State<AlbumsBrowsePage> {
                                 setState(() {
                                   _selectedDecade = null;
                                   _selectedArtistId = null;
+                                  _artistFieldController.text = 'All artists';
                                   _reloadAlbums();
                                 });
                               },
@@ -241,6 +344,13 @@ class _AlbumsBrowsePageState extends State<AlbumsBrowsePage> {
       },
     );
   }
+}
+
+class _ArtistFilterOption {
+  const _ArtistFilterOption({required this.artistId, required this.label});
+
+  final int? artistId;
+  final String label;
 }
 
 class _AlbumCard extends StatelessWidget {

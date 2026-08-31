@@ -49,21 +49,29 @@ class MusicTrack {
     final rawId = json['id'] ?? json['songId'];
     final rawDuration = json['durationSeconds'] ?? json['songLength'];
     final rawTags = json['tags'];
+    final rawRankOrder = json['rankOrder'];
+
+    final parsedRankOrder = switch (rawRankOrder) {
+      null => -1.0,
+      num value => value.toDouble(),
+      _ => double.tryParse(rawRankOrder.toString()) ?? -1.0,
+    };
 
     return MusicTrack(
       id: rawId?.toString() ?? '',
       title: (json['title'] ?? '').toString(),
-      artist: (json['artist'] ?? json['artistName'] ?? 'Unknown artist')
-          .toString(),
+      artist:
+          (json['artist'] ?? json['artistName'] ?? 'Unknown artist').toString(),
       album: (json['album'] ?? json['albumTitle'] ?? '').toString(),
       durationSeconds: rawDuration is num
           ? rawDuration.toInt()
           : int.tryParse(rawDuration?.toString() ?? '') ?? 0,
-      rankOrder: (json['rankOrder'] as num?)?.toDouble() ?? 0.0,
+      rankOrder: parsedRankOrder,
       tags: rawTags is List
           ? List<String>.from(rawTags.map((tag) => tag.toString()))
           : const <String>[],
-      streamUrl: json['streamUrl']?.toString() ?? json['stream_url']?.toString(),
+      streamUrl:
+          json['streamUrl']?.toString() ?? json['stream_url']?.toString(),
       stream: json['stream']?.toString(),
       filePath: json['filePath']?.toString(),
     );

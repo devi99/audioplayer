@@ -4,6 +4,7 @@ import '../services/music_library_api.dart';
 import 'albums_browse_page.dart';
 import 'artists_browse_page.dart';
 import 'library_navigation_pane.dart';
+import 'play_screen.dart';
 import 'songs_browse_page.dart';
 
 class LibraryScreen extends StatefulWidget {
@@ -15,6 +16,7 @@ class LibraryScreen extends StatefulWidget {
   @override
   State<LibraryScreen> createState() => _LibraryScreenState();
 }
+
 class _LibraryScreenState extends State<LibraryScreen> {
   static const double _collapsedPaneWidth = 84;
   static const double _expandedPaneWidth = 252;
@@ -76,6 +78,10 @@ class _LibraryScreenState extends State<LibraryScreen> {
                       ),
                     LibrarySection.songs => SongsBrowsePage(
                         key: const ValueKey('songs'),
+                        api: widget.api,
+                      ),
+                    LibrarySection.play => PlayScreen(
+                        key: const ValueKey('play'),
                         api: widget.api,
                       ),
                   },

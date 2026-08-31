@@ -53,6 +53,68 @@ void main() {
     expect(find.text('Song 21'), findsOneWidget);
   });
 
+  testWidgets('shows Play in navigation and builds a tier-specific queue',
+      (WidgetTester tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: LibraryScreen(api: TieredMusicLibraryApi()),
+      ),
+    );
+
+    await tester.pumpAndSettle();
+
+    expect(find.text('Play'), findsOneWidget);
+
+    await tester.tap(find.text('Play'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('3 queued songs'), findsOneWidget);
+    expect(find.text('Tier 1 No Filepath Song'), findsNothing);
+    expect(find.text('Tier 1'), findsOneWidget);
+
+    await tester.tap(find.text('Tier 2'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('1 queued songs'), findsOneWidget);
+    expect(find.text('Tier 2 Song'), findsOneWidget);
+
+    await tester.tap(find.byIcon(Icons.delete_outline_rounded).first);
+    await tester.pumpAndSettle();
+
+    expect(find.text('0 queued songs'), findsOneWidget);
+    expect(find.text('No songs in this tier.'), findsOneWidget);
+  });
+
+  testWidgets('updates now playing and advances with Next in Play queue',
+      (WidgetTester tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: LibraryScreen(api: TieredMusicLibraryApi()),
+      ),
+    );
+
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Play'));
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('Now Playing: Nothing currently playing'),
+        findsOneWidget);
+
+    await tester.tap(find.text('Play Queue'));
+    await tester.pumpAndSettle();
+
+    expect(
+        find.textContaining('Now Playing: Tier 1 Null Song'), findsOneWidget);
+
+    await tester.tap(find.text('Next'));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.textContaining('Now Playing: Tier 1 Negative Song'),
+      findsOneWidget,
+    );
+  });
+
   testWidgets('disables play for songs without a stream source',
       (WidgetTester tester) async {
     await tester.pumpWidget(
@@ -270,5 +332,76 @@ class FakeMusicLibraryApi extends MusicLibraryApi {
   @override
   Future<String?> lookupArtistImage(String artistName) async {
     return null;
+  }
+}
+
+class TieredMusicLibraryApi extends MusicLibraryApi {
+  @override
+  Future<List<MusicTrack>> fetchSongs({
+    int pageNumber = 1,
+    int pageSize = 20,
+  }) async {
+    final missingRank = MusicTrack.fromJson({
+      'id': 't1-null',
+      'title': 'Tier 1 Null Song',
+      'artist': 'Tier Tester',
+      'album': 'Tier Album',
+      'durationSeconds': 180,
+      'filePath': '/stream/t1-null.mp3',
+      'tags': ['tier'],
+    });
+
+    return <MusicTrack>[
+      missingRank,
+      const MusicTrack(
+        id: 't1-negative',
+        title: 'Tier 1 Negative Song',
+        artist: 'Tier Tester',
+        album: 'Tier Album',
+        durationSeconds: 181,
+        rankOrder: -0.5,
+        filePath: '/stream/t1-negative.mp3',
+        tags: ['tier'],
+      ),
+      const MusicTrack(
+        id: 't2',
+        title: 'Tier 2 Song',
+        artist: 'Tier Tester',
+        album: 'Tier Album',
+        durationSeconds: 182,
+        rankOrder: 0.2,
+        filePath: '/stream/t2.mp3',
+        tags: ['tier'],
+      ),
+      const MusicTrack(
+        id: 't1-no-file',
+        title: 'Tier 1 No Filepath Song',
+        artist: 'Tier Tester',
+        album: 'Tier Album',
+        durationSeconds: 182,
+        rankOrder: -0.2,
+        tags: ['tier'],
+      ),
+      const MusicTrack(
+        id: 't1-negative-2',
+        title: 'Tier 1 Negative Song B',
+        artist: 'Tier Tester',
+        album: 'Tier Album',
+        durationSeconds: 183,
+        rankOrder: -0.1,
+        filePath: '/stream/t1-negative-2.mp3',
+        tags: ['tier'],
+      ),
+      const MusicTrack(
+        id: 't5',
+        title: 'Tier 5 Song',
+        artist: 'Tier Tester',
+        album: 'Tier Album',
+        durationSeconds: 184,
+        rankOrder: 3.5,
+        filePath: '/stream/t5.mp3',
+        tags: ['tier'],
+      ),
+    ];
   }
 }

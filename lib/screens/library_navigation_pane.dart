@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 
 export 'library_navigation_pane.dart' show LibrarySection;
 
-enum LibrarySection { artists, albums, songs }
+enum LibrarySection { artists, albums, songs, play }
 
 class LibraryNavigationPane extends StatelessWidget {
   const LibraryNavigationPane({
@@ -111,6 +111,14 @@ class LibraryNavigationPane extends StatelessWidget {
             label: 'Songs',
             onTap: () => onSelectSection(LibrarySection.songs),
           ),
+          _NavigationItem(
+            collapsed: collapsed,
+            selected: selectedSection == LibrarySection.play,
+            icon: Icons.play_circle_outline_rounded,
+            selectedIcon: Icons.play_circle_rounded,
+            label: 'Play',
+            onTap: () => onSelectSection(LibrarySection.play),
+          ),
           const Spacer(),
           _ResizeHandle(onDragUpdate: onResize),
         ],
@@ -145,7 +153,9 @@ class _NavigationItem extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
       child: Material(
-        color: selected ? selectedColor.withValues(alpha: 0.7) : Colors.transparent,
+        color: selected
+            ? selectedColor.withValues(alpha: 0.7)
+            : Colors.transparent,
         borderRadius: BorderRadius.circular(16),
         child: InkWell(
           borderRadius: BorderRadius.circular(16),
@@ -156,8 +166,9 @@ class _NavigationItem extends StatelessWidget {
               vertical: collapsed ? 14 : 16,
             ),
             child: Row(
-              mainAxisAlignment:
-                  collapsed ? MainAxisAlignment.center : MainAxisAlignment.start,
+              mainAxisAlignment: collapsed
+                  ? MainAxisAlignment.center
+                  : MainAxisAlignment.start,
               children: <Widget>[
                 Icon(
                   selected ? selectedIcon : icon,

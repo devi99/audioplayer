@@ -76,6 +76,35 @@ class MusicLibraryApi {
         .toList(growable: false);
   }
 
+  Future<List<String>> fetchSongTags(String songId) async {
+    final response = await _client.get(
+      _buildUri('/api/songs/$songId/tags'),
+    );
+
+    if (response.statusCode != 200) {
+      throw Exception(
+        'Failed to load /api/songs/$songId/tags (${response.statusCode})',
+      );
+    }
+
+    final decoded = jsonDecode(response.body);
+    if (decoded is! List) {
+      return const <String>[];
+    }
+
+    final tags = <String>[];
+    for (final tag in decoded) {
+      if (tag is Map) {
+        final name = tag['name']?.toString().trim() ?? '';
+        if (name.isNotEmpty) {
+          tags.add(name);
+        }
+      }
+    }
+
+    return tags;
+  }
+
   String streamSongUrl(String songId) {
     return _buildUri('/api/MusicStream/stream/$songId').toString();
   }

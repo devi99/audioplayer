@@ -53,6 +53,32 @@ void main() {
     expect(find.text('Song 21'), findsOneWidget);
   });
 
+  testWidgets('opens an album detail view and returns to the album list',
+      (WidgetTester tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: LibraryScreen(api: FakeMusicLibraryApi()),
+      ),
+    );
+
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Albums').first);
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Night Drive').first);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Album songs'), findsOneWidget);
+    expect(find.text('Sunset Glow'), findsOneWidget);
+    expect(find.byIcon(Icons.play_arrow_rounded), findsWidgets);
+
+    await tester.tap(find.byIcon(Icons.arrow_back_rounded));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Night Drive'), findsOneWidget);
+    expect(find.text('Albums'), findsWidgets);
+  });
+
   testWidgets('shows Play in navigation and builds a tier-specific queue',
       (WidgetTester tester) async {
     await tester.pumpWidget(
@@ -305,6 +331,7 @@ class FakeMusicLibraryApi extends MusicLibraryApi {
           durationSeconds: 210,
           rankOrder: 4,
           tags: ['ambient'],
+          filePath: index <= 3 ? '/music/$index.mp3' : null,
         ),
     ];
 
@@ -322,6 +349,16 @@ class FakeMusicLibraryApi extends MusicLibraryApi {
         : startIndex + pageSize;
 
     return allTracks.sublist(startIndex, endIndex).toList(growable: false);
+  }
+
+  @override
+  Future<List<MusicTrack>> fetchAlbumSongs(int albumId) async {
+    final allTracks = await fetchSongs(pageSize: 0);
+    return allTracks
+        .where((song) =>
+            song.album == 'Night Drive' && albumId == 1 ||
+            song.album == 'Daylight' && albumId == 2)
+        .toList(growable: false);
   }
 
   @override

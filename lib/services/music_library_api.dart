@@ -76,6 +76,26 @@ class MusicLibraryApi {
         .toList(growable: false);
   }
 
+  Future<List<MusicTrack>> fetchAlbumSongs(int albumId) async {
+    final response = await _client.get(
+      _buildUri('/api/Albums/$albumId/songs'),
+    );
+
+    if (response.statusCode != 200) {
+      throw Exception(
+        'Failed to load /api/Albums/$albumId/songs (${response.statusCode})',
+      );
+    }
+
+    final decoded = jsonDecode(response.body);
+    final items = decoded is List ? decoded : const <dynamic>[];
+
+    return items
+        .map((item) =>
+            MusicTrack.fromJson(Map<String, dynamic>.from(item as Map)))
+        .toList(growable: false);
+  }
+
   Future<List<String>> fetchSongTags(String songId) async {
     final response = await _client.get(
       _buildUri('/api/songs/$songId/tags'),

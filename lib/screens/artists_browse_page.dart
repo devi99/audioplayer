@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../models/library_entities.dart';
 import '../services/music_library_api.dart';
+import 'artist_albums_songs_page.dart';
 import 'shared_library_widgets.dart';
 
 class ArtistsBrowsePage extends StatelessWidget {
@@ -84,7 +85,13 @@ class _ArtistCard extends StatelessWidget {
       color: theme.colorScheme.surface.withValues(alpha: 0.88),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
       child: InkWell(
-        onTap: () {},
+        onTap: () {
+          Navigator.of(context).push(
+            MaterialPageRoute<void>(
+              builder: (context) => ArtistAlbumsSongsPage(artist: artist, api: api),
+            ),
+          );
+        },        
         child: Padding(
           padding: const EdgeInsets.all(14),
           child: Column(

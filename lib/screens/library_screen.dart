@@ -1,9 +1,8 @@
-import 'dart:async';
+import '../services/music_library_api.dart';
 
+import '../components/now_playing_bar.dart' show NowPlayingBar;
 import 'package:flutter/material.dart';
 
-import '../models/music_track.dart';
-import '../services/music_library_api.dart';
 import '../services/playback_controller.dart';
 import 'albums_browse_page.dart';
 import 'artists_browse_page.dart';
@@ -101,7 +100,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
                         if (track == null) {
                           return const SizedBox.shrink();
                         }
-                        return _NowPlayingBar(track: track);
+                        return NowPlayingBar(track: track);
                       },
                     ),
                   ],
@@ -110,53 +109,6 @@ class _LibraryScreenState extends State<LibraryScreen> {
             ],
           ),
         ),
-      ),
-    );
-  }
-}
-
-class _NowPlayingBar extends StatelessWidget {
-  const _NowPlayingBar({required this.track});
-
-  final MusicTrack track;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final controller = PlaybackController.instance;
-
-    return Container(
-      width: double.infinity,
-      margin: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      decoration: BoxDecoration(
-        color: theme.colorScheme.surface.withValues(alpha: 0.9),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: theme.colorScheme.outlineVariant.withValues(alpha: 0.7),
-        ),
-      ),
-      child: Row(
-        children: <Widget>[
-          IconButton.filled(
-            onPressed: () {
-              unawaited(controller.stop());
-            },
-            icon: const Icon(Icons.stop_rounded),
-            tooltip: 'Stop',
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Text(
-              '${track.artist} — ${track.title}',
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: theme.textTheme.titleMedium?.copyWith(
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-          ),
-        ],
       ),
     );
   }

@@ -46,6 +46,26 @@ class MusicLibraryApi {
       parser: AlbumSummary.fromJson,
     );
   }
+  
+  Future<List<AlbumSummary>> fetchArtistAlbums(int artistId) async {
+    final response = await _client.get(
+      _buildUri('/api/Artists/$artistId/albums'),
+    );
+
+    if (response.statusCode != 200) {
+      throw Exception(
+        'Failed to load /api/Artists/$artistId/albums (${response.statusCode})',
+      );
+    }
+
+    final decoded = jsonDecode(response.body);
+    final items = decoded is List ? decoded : const <dynamic>[];
+
+    return items
+        .map((item) =>
+            AlbumSummary.fromJson(Map<String, dynamic>.from(item as Map)))
+        .toList(growable: false);
+  }
 
   Future<List<MusicTrack>> fetchSongs(
       {int pageNumber = 1, int pageSize = 20}) async {

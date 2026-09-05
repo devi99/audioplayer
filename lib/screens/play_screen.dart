@@ -697,7 +697,7 @@ class _PlayScreenState extends State<PlayScreen> {
       return const Center(child: CircularProgressIndicator());
     }
 
-    return Padding(
+    return SingleChildScrollView(
       padding: const EdgeInsets.all(24),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -922,26 +922,27 @@ class _PlayScreenState extends State<PlayScreen> {
             ),
           ),
           const SizedBox(height: 16),
-          Expanded(
-            child: _queue.isEmpty
-                ? Center(
-                    child: Text(
-                      _selectedTiers.isEmpty
-                          ? 'Select one or more tiers to build queue.'
-                          : _playFilterMode == PlayFilterMode.whitelist &&
-                                  _whitelistedTags.isEmpty &&
-                                  !_whitelistIncludeUntagged
-                              ? 'Select one or more whitelist tags (or None) to build queue.'
-                              : 'No songs in the selected tiers.',
-                      style: theme.textTheme.titleMedium?.copyWith(
-                        color: theme.colorScheme.onSurfaceVariant,
-                      ),
+          _queue.isEmpty
+              ? Center(
+                  child: Text(
+                    _selectedTiers.isEmpty
+                        ? 'Select one or more tiers to build queue.'
+                        : _playFilterMode == PlayFilterMode.whitelist &&
+                                _whitelistedTags.isEmpty &&
+                                !_whitelistIncludeUntagged
+                            ? 'Select one or more whitelist tags (or None) to build queue.'
+                            : 'No songs in the selected tiers.',
+                    style: theme.textTheme.titleMedium?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
                     ),
-                  )
-                : ListView.separated(
-                    itemCount: _queue.length,
-                    separatorBuilder: (_, __) => const SizedBox(height: 8),
-                    itemBuilder: (context, index) {
+                  ),
+                )
+              : ListView.separated(
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  itemCount: _queue.length,
+                  separatorBuilder: (_, __) => const SizedBox(height: 8),
+                  itemBuilder: (context, index) {
                       final song = _queue[index];
                       final isCurrent =
                           _isPlayingQueue && index == _currentQueueIndex;
@@ -1044,7 +1045,6 @@ class _PlayScreenState extends State<PlayScreen> {
                       );
                     },
                   ),
-          ),
         ],
       ),
     );

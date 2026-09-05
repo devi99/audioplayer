@@ -388,7 +388,8 @@ class MusicLibraryApi {
 
   Uri _buildUri(String path, {Map<String, String>? queryParameters}) {
     final root = baseUrl.replaceAll(RegExp(r'/$'), '');
-    return Uri.parse('$root$path').replace(queryParameters: queryParameters);
+    final cleanPath = path.replaceAll(RegExp(r'^/+'), '');
+    return Uri.parse('$root/$cleanPath').replace(queryParameters: queryParameters);
   }
 
   Future<Map<String, dynamic>> _getJson(

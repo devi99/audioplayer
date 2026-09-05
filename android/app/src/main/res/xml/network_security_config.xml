@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<network-security-config>
+    <!-- Allow HTTPS traffic to your API domain -->
+    <domain-config cleartextTrafficPermitted="false">
+        <domain includeSubdomains="true">musiclibrary-api.dev.tarabora.eu</domain>
+        <domain includeSubdomains="true">en.wikipedia.org</domain>
+        <domain includeSubdomains="true">musicbrainz.org</domain>
+        <domain includeSubdomains="true">coverartarchive.org</domain>
+    </domain-config>
+    
+    <!-- Allow cleartext traffic for development (remove in production) -->
+    <base-config cleartextTrafficPermitted="true">
+        <trust-anchors>
+            <certificates src="system"/>
+            <certificates src="user"/>
+        </trust-anchors>
+    </base-config>
+</network-security-config>

@@ -18,8 +18,12 @@ class SongsBrowsePage extends StatefulWidget {
 
 class _SongsBrowsePageState extends State<SongsBrowsePage> {
   static const int _pageSize = 20;
+  static const Duration _searchDebounceDuration = Duration(milliseconds: 500);
 
   late final Future<List<MusicTrack>> _songsFuture;
+  late final TextEditingController _songFieldController;
+  late final FocusNode _songFieldFocusNode;
+
   int _pageNumber = 1;
   List<TagOption> _availableTags = const <TagOption>[];
   bool _isLoadingAvailableTags = false;
@@ -29,11 +33,84 @@ class _SongsBrowsePageState extends State<SongsBrowsePage> {
   final Map<String, List<String>> _songTagsById = <String, List<String>>{};
   final Map<String, double> _rankOrderBySongId = <String, double>{};
 
+  String _searchQuery = '';
+  List<MusicTrack> _searchResults = const <MusicTrack>[];
+  bool _isSearching = false;
+  Timer? _searchDebounceTimer;
+
   @override
   void initState() {
     super.initState();
     _songsFuture = widget.api.fetchSongs(pageSize: 0);
     unawaited(_primeTagsCatalog());
+    _songFieldController = TextEditingController(text: '');
+    _songFieldFocusNode = FocusNode();
+    _songFieldController.addListener(_onSearchTextChanged);
+    //_artistsFuture = widget.api.fetchArtists();
+    //_reloadAlbums();
+  }
+
+  @override
+  void dispose() {
+    _searchDebounceTimer?.cancel();
+    _songFieldController.removeListener(_onSearchTextChanged);
+    _songFieldController.dispose();
+    _songFieldFocusNode.dispose();
+    super.dispose();
+  }
+
+  void _onSearchTextChanged() {
+    final query = _songFieldController.text;
+    if (query == _searchQuery) {
+      return;
+    }
+
+    _searchDebounceTimer?.cancel();
+
+    if (query.isEmpty || query.length < 3) {
+      setState(() {
+        _searchQuery = query;
+        _searchResults = const <MusicTrack>[];
+        _isSearching = false;
+      });
+      return;
+    }
+
+    setState(() {
+      _searchQuery = query;
+      _isSearching = true;
+    });
+
+    _searchDebounceTimer = Timer(_searchDebounceDuration, () {
+      unawaited(_performSearch(query));
+    });
+  }
+
+  Future<void> _performSearch(String query) async {
+    try {
+      final results = await widget.api.fetchSearchSongTitles(query);
+      if (!mounted) {
+        return;
+      }
+
+      setState(() {
+        _searchResults = results;
+        _isSearching = false;
+      });
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+
+      setState(() {
+        _searchResults = const <MusicTrack>[];
+        _isSearching = false;
+      });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Search failed: $error')),
+      );
+    }
   }
 
   Future<void> _primeTagsCatalog() async {
@@ -341,7 +418,8 @@ class _SongsBrowsePageState extends State<SongsBrowsePage> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Unable to play "${song.title}" — no stream is available.'),
+          content:
+              Text('Unable to play "${song.title}" — no stream is available.'),
         ),
       );
       return;
@@ -356,7 +434,8 @@ class _SongsBrowsePageState extends State<SongsBrowsePage> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Unable to play "${song.title}". The stream is unavailable.'),
+          content: Text(
+              'Unable to play "${song.title}". The stream is unavailable.'),
         ),
       );
     }
@@ -386,13 +465,16 @@ class _SongsBrowsePageState extends State<SongsBrowsePage> {
           );
         }
 
-        final songs = snapshot.data ?? const <MusicTrack>[];
+        final allSongs = snapshot.data ?? const <MusicTrack>[];
+
+        // Use search results when available, otherwise use all songs
+        final songs = _searchQuery.isEmpty || _searchQuery.length < 3
+            ? allSongs
+            : _searchResults;
         final totalPages = (songs.length / _pageSize).ceil();
         final startIndex = (_pageNumber - 1) * _pageSize;
-        final currentSongs = songs
-            .skip(startIndex)
-            .take(_pageSize)
-            .toList(growable: false);
+        final currentSongs =
+            songs.skip(startIndex).take(_pageSize).toList(growable: false);
 
         WidgetsBinding.instance.addPostFrameCallback((_) {
           unawaited(_ensureSongTagsLoaded(currentSongs));
@@ -418,9 +500,45 @@ class _SongsBrowsePageState extends State<SongsBrowsePage> {
               ),
               const SizedBox(height: 6),
               Text(
-                '${songs.length} songs in your library',
+                _searchQuery.isEmpty
+                    ? '${allSongs.length} songs in your library'
+                    : _searchQuery.length < 3
+                        ? 'Type at least 3 characters to search'
+                        : '${songs.length} songs matching "$_searchQuery"',
                 style: theme.textTheme.bodyMedium
                     ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+              ),
+              const SizedBox(height: 16),
+              TextField(
+                controller: _songFieldController,
+                focusNode: _songFieldFocusNode,
+                decoration: InputDecoration(
+                  labelText: 'Search song titles',
+                  prefixIcon: const Icon(Icons.search_rounded),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  suffixIcon: _isSearching
+                      ? Padding(
+                          padding: const EdgeInsets.all(12),
+                          child: SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: theme.colorScheme.primary,
+                            ),
+                          ),
+                        )
+                      : _searchQuery.isNotEmpty
+                          ? IconButton(
+                              icon: const Icon(Icons.clear_rounded),
+                              onPressed: () {
+                                _songFieldController.clear();
+                              },
+                            )
+                          : null,
+                ),
               ),
               const SizedBox(height: 16),
               if (songs.length > _pageSize)
@@ -464,14 +582,15 @@ class _SongsBrowsePageState extends State<SongsBrowsePage> {
                     final rankOrder = _rankOrderForSong(song);
                     final selectedTier = _tierFromRankOrder(rankOrder);
                     final selectedTierLabel = selectedTier == null
-                      ? 'Select rank'
-                      : 'Tier $selectedTier';
-                    final isUpdatingTag = _updatingTagsForSongIds.contains(song.id);
+                        ? 'Select rank'
+                        : 'Tier $selectedTier';
+                    final isUpdatingTag =
+                        _updatingTagsForSongIds.contains(song.id);
                     final isUpdatingTier =
                         _updatingRankForSongIds.contains(song.id);
                     final hasLoadedTags = _songTagsById.containsKey(song.id);
                     final isLoadingSongTags =
-                      _loadingTagsForSongIds.contains(song.id);
+                        _loadingTagsForSongIds.contains(song.id);
                     final hasStream = (song.filePath ?? '').trim().isNotEmpty;
 
                     return Container(
@@ -480,7 +599,8 @@ class _SongsBrowsePageState extends State<SongsBrowsePage> {
                         horizontal: 12,
                       ),
                       decoration: BoxDecoration(
-                        color: theme.colorScheme.surface.withValues(alpha: 0.82),
+                        color:
+                            theme.colorScheme.surface.withValues(alpha: 0.82),
                         borderRadius: BorderRadius.circular(16),
                       ),
                       child: Row(
@@ -521,10 +641,10 @@ class _SongsBrowsePageState extends State<SongsBrowsePage> {
                                 const SizedBox(height: 6),
                                 Text(
                                   !hasLoadedTags && isLoadingSongTags
-                                    ? 'Tags: loading...'
-                                    : songTags.isEmpty
-                                      ? 'Tags: none'
-                                      : 'Tags: ${songTags.join(', ')}',
+                                      ? 'Tags: loading...'
+                                      : songTags.isEmpty
+                                          ? 'Tags: none'
+                                          : 'Tags: ${songTags.join(', ')}',
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
                                   style: theme.textTheme.bodySmall?.copyWith(
@@ -533,9 +653,9 @@ class _SongsBrowsePageState extends State<SongsBrowsePage> {
                                 ),
                                 const SizedBox(height: 6),
                                 Text(
-                                      selectedTier == null
-                                          ? 'Selected tier: Select rank'
-                                          : 'Selected tier: Tier $selectedTier (rankOrder ${rankOrder.toStringAsFixed(2)})',
+                                  selectedTier == null
+                                      ? 'Selected tier: Select rank'
+                                      : 'Selected tier: Tier $selectedTier (rankOrder ${rankOrder.toStringAsFixed(2)})',
                                   style: theme.textTheme.bodyMedium?.copyWith(
                                     color: theme.colorScheme.primary,
                                   ),
@@ -597,7 +717,8 @@ class _SongsBrowsePageState extends State<SongsBrowsePage> {
                                     : const Icon(Icons.sell_outlined),
                               ),
                               IconButton(
-                                onPressed: hasStream ? () => _playSong(song) : null,
+                                onPressed:
+                                    hasStream ? () => _playSong(song) : null,
                                 icon: const Icon(Icons.play_arrow_rounded),
                                 tooltip: hasStream ? 'Play' : 'Unavailable',
                               ),

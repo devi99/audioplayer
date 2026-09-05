@@ -46,7 +46,7 @@ class MusicLibraryApi {
       parser: AlbumSummary.fromJson,
     );
   }
-  
+
   Future<List<AlbumSummary>> fetchArtistAlbums(int artistId) async {
     final response = await _client.get(
       _buildUri('/api/Artists/$artistId/albums'),
@@ -112,6 +112,32 @@ class MusicLibraryApi {
     return tracks
         .sublist(
             startIndex, endIndex > tracks.length ? tracks.length : endIndex)
+        .toList(growable: false);
+  }
+
+  Future<List<MusicTrack>> fetchSearchSongTitles(String title) async {
+    final response = await _client.post(
+      _buildUri('/api/Songs/search-title-only'),
+      headers: const <String, String>{'Content-Type': 'application/json'},
+      body: jsonEncode(<String, dynamic>{'title': title}),
+    );
+
+    if (response.statusCode != 200) {
+      throw Exception(
+        'Failed to search songs by title (${response.statusCode})',
+      );
+    }
+
+    final decoded = jsonDecode(response.body);
+    final dynamic itemsDynamic = decoded is List
+        ? decoded
+        : (decoded as Map<String, dynamic>? ??
+            const <String, dynamic>{})['items'];
+    final items = itemsDynamic is List ? itemsDynamic : const <dynamic>[];
+
+    return items
+        .map((item) =>
+            MusicTrack.fromJson(Map<String, dynamic>.from(item as Map)))
         .toList(growable: false);
   }
 

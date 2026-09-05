@@ -481,6 +481,7 @@ class _PlayScreenState extends State<PlayScreen> {
 
   Future<void> _startQueuePlayback() async {
     if (_queue.isEmpty) {
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(

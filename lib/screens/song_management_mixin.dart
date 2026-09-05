@@ -164,6 +164,7 @@ mixin SongManagementMixin<T extends StatefulWidget> on State<T> {
     final existingTagNames =
         tagsForSong(song).map((tag) => tag.trim().toLowerCase()).toSet();
 
+    if (!mounted) return;
     final selectedTag = await showModalBottomSheet<TagOption>(
       context: context,
       showDragHandle: true,

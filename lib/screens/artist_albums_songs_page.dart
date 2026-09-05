@@ -55,10 +55,6 @@ class _ArtistAlbumsSongsPageState extends State<ArtistAlbumsSongsPage> {
         child: FutureBuilder<List<AlbumSummary>>(
           future: _albumsFuture,
           builder: (context, snapshot) {
-            final albums = (snapshot.data ?? const <AlbumSummary>[])
-              .toList(growable: false)
-              ..sort((left, right) => left.title.compareTo(right.title));
-
           return FutureBuilder<List<AlbumSummary>>(
               future: _albumsFuture,
               builder: (context, snapshot) {
@@ -73,7 +69,9 @@ class _ArtistAlbumsSongsPageState extends State<ArtistAlbumsSongsPage> {
                   );
                 }
 
-                final albums = snapshot.data ?? const <AlbumSummary>[];
+                final albums = (snapshot.data ?? const <AlbumSummary>[])
+                  .toList(growable: false)
+                  ..sort((left, right) => left.title.compareTo(right.title));
                 final summaryParts = <String>[
                   '${albums.length} albums',
                 ];

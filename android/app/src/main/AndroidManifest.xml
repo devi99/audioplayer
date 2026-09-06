@@ -11,10 +11,6 @@
         android:label="audioplayer"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
-        <service
-            android:name="com.rxlabz.audioplayers.AudioService"
-            android:foregroundServiceType="mediaPlayback"
-            android:exported="false"/>
         <activity
             android:name=".MainActivity"
             android:exported="true"

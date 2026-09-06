@@ -1,5 +1,9 @@
+import 'dart:async';
+import 'dart:io';
+
 import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 
 import '../models/music_track.dart';
 import 'song_cache.dart';
@@ -25,6 +29,7 @@ class PlaybackController {
   }
 
   static final PlaybackController instance = PlaybackController._();
+  static const MethodChannel _channel = MethodChannel('com.example.audioplayer/notification');
 
   final AudioPlayer _player = AudioPlayer()
     ..setReleaseMode(ReleaseMode.stop);
@@ -48,14 +53,37 @@ class PlaybackController {
       // Play from cache
       await _player.stop();
       await _player.play(DeviceFileSource(cachedPath));
+      // Set now playing state immediately after playback starts
       _setNowPlaying(track);
+      // Show notification (don't await, as it may fail on non-Android platforms)
+      unawaited(_showNotification(track));
       return;
     }
     
-    // Not cached - start streaming and download in background
+    // On Linux and other non-mobile platforms, UrlSource doesn't work reliably
+    // So we need to download first, then play
+    final isMobile = Platform.isAndroid || Platform.isIOS;
+    
+    if (!isMobile) {
+      // For Linux, Windows, macOS, Web: download first, then play
+      await _player.stop();
+      // Download and cache synchronously before playing
+      final downloadedPath = await _cache.downloadAndCache(track.id, streamUrl);
+      await _player.play(DeviceFileSource(downloadedPath));
+      // Set now playing state immediately after playback starts
+      _setNowPlaying(track);
+      // Show notification (don't await, as it may fail on non-Android platforms)
+      unawaited(_showNotification(track));
+      return;
+    }
+    
+    // For Android and iOS: start streaming and download in background
     await _player.stop();
     await _player.play(UrlSource(streamUrl));
+    // Set now playing state immediately after playback starts
     _setNowPlaying(track);
+    // Show notification (may fail on some platforms, but don't let it block)
+    unawaited(_showNotification(track));
     
     // Download for future playback
     _downloadForCache(track.id, streamUrl);
@@ -80,15 +108,35 @@ class PlaybackController {
 
   Future<void> stop() async {
     await _player.stop();
+    // Hide notification (don't await, as it may fail on non-Android platforms)
+    unawaited(_hideNotification());
     _setNowPlaying(null);
   }
 
-  void _setNowPlaying(MusicTrack? track) {
-    final currentTrackId = nowPlaying.value.track?.id;
-    final nextTrackId = track?.id;
-    if (currentTrackId == nextTrackId) {
-      return;
+  Future<void> _showNotification(MusicTrack track) async {
+    try {
+      await _channel.invokeMethod('showNotification', {
+        'title': track.title,
+        'artist': track.artist,
+        'isPlaying': true,
+      });
+    } catch (e) {
+      // On non-Android platforms, notifications are not supported
+      debugPrint('Failed to show notification: $e');
     }
+  }
+
+  Future<void> _hideNotification() async {
+    try {
+      await _channel.invokeMethod('hideNotification');
+    } catch (e) {
+      // On non-Android platforms, notifications are not supported
+      debugPrint('Failed to hide notification: $e');
+    }
+  }
+
+  void _setNowPlaying(MusicTrack? track) {
+    // Always update the state to ensure UI consistency
     nowPlaying.value = NowPlayingState(track: track);
   }
   

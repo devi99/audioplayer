@@ -9,14 +9,33 @@ import android.content.Intent
 import android.graphics.BitmapFactory
 import android.os.Build
 import androidx.core.app.NotificationCompat
+import io.flutter.embedding.engine.FlutterEngine
+import io.flutter.plugin.common.MethodChannel
 
 class NotificationHelper(private val context: Context) {
     companion object {
         private const val CHANNEL_ID = "audioplayer_notification_channel"
         private const val CHANNEL_NAME = "Audio Player"
         private const val NOTIFICATION_ID = 1
+        private const val MEDIA_CHANNEL = "com.example.audioplayer/media"
         
         private var notificationManager: NotificationManager? = null
+        private var mediaChannel: MethodChannel? = null
+        
+        fun initFlutterChannel(flutterEngine: FlutterEngine) {
+            mediaChannel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, MEDIA_CHANNEL)
+        }
+        
+        fun sendMediaAction(context: Context, action: String) {
+            mediaChannel?.invokeMethod(action, null)
+            // Also try the main notification channel as fallback
+            try {
+                val channel = MethodChannel(MethodChannel(context, "com.example.audioplayer/notification").binaryMessenger, "com.example.audioplayer/notification")
+                channel.invokeMethod("onMediaAction", action)
+            } catch (e: Exception) {
+                // Ignore fallback failure
+            }
+        }
         
         fun createNotificationChannel(context: Context) {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -31,39 +50,18 @@ class NotificationHelper(private val context: Context) {
         }
         
         fun showNotification(context: Context, title: String, artist: String, isPlaying: Boolean) {
-            createNotificationChannel(context)
-            
-            val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-            
-            // Create an intent to open the app when notification is clicked
-            val intent = Intent(context, MainActivity::class.java).apply {
-                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
-            }
-            val pendingIntent = PendingIntent.getActivity(
-                context,
-                0,
-                intent,
-                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-            )
-            
-            // Build the notification
-            val notification = NotificationCompat.Builder(context, CHANNEL_ID)
-                .setContentTitle(title)
-                .setContentText(artist)
-                .setSmallIcon(android.R.drawable.ic_media_play)
-                .setLargeIcon(BitmapFactory.decodeResource(context.resources, android.R.drawable.ic_media_play))
-                .setContentIntent(pendingIntent)
-                .setPriority(NotificationCompat.PRIORITY_LOW)
-                .setOngoing(true)
-                .setAutoCancel(false)
-                .build()
-            
-            notificationManager.notify(NOTIFICATION_ID, notification)
+            // Start the AudioService which will show a foreground notification with controls
+            AudioService.startService(context, title, artist, isPlaying)
         }
         
         fun hideNotification(context: Context) {
+            AudioService.stopService(context)
             val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
             notificationManager.cancel(NOTIFICATION_ID)
+        }
+        
+        fun updateNotification(context: Context, title: String, artist: String, isPlaying: Boolean) {
+            AudioService.updateNotification(context, title, artist, isPlaying)
         }
     }
 }

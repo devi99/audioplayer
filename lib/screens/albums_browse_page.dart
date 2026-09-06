@@ -229,6 +229,11 @@ class _AlbumsBrowsePageState extends State<AlbumsBrowsePage> {
                                   onTapOutside: (_) {
                                     focusNode.unfocus();
                                   },
+                                  onTap: () {
+                                    if (controller.text == 'All artists') {
+                                      controller.clear();
+                                    }
+                                  },
                                   onFieldSubmitted: (_) {
                                     onFieldSubmitted();
                                   },

@@ -161,87 +161,37 @@ mixin SongManagementMixin<T extends StatefulWidget> on State<T> {
       );
       return;
     }
-    final existingTagNames =
-        tagsForSong(song).map((tag) => tag.trim().toLowerCase()).toSet();
 
     if (!mounted) return;
-    final selectedTag = await showModalBottomSheet<TagOption>(
+    await showModalBottomSheet<void>(
       context: context,
       showDragHandle: true,
-      builder: (context) {
-        final theme = Theme.of(context);
-        final sortedTags = availableTags.toList(growable: false)
-          ..sort((left, right) => left.name.compareTo(right.name));
-        return SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: <Widget>[
-                Text(
-                  'Add tag to "${song.title}"',
-                  style: theme.textTheme.titleMedium
-                      ?.copyWith(fontWeight: FontWeight.w700),
-                ),
-                const SizedBox(height: 10),
-                Flexible(
-                  child: ListView.separated(
-                    shrinkWrap: true,
-                    itemCount: sortedTags.length,
-                    separatorBuilder: (_, __) => const Divider(height: 1),
-                    itemBuilder: (context, index) {
-                      final option = sortedTags[index];
-                      final alreadyAssigned =
-                          existingTagNames.contains(option.name.toLowerCase());
-                      return ListTile(
-                        dense: true,
-                        enabled: !alreadyAssigned,
-                        title: Text(option.name),
-                        subtitle: alreadyAssigned
-                            ? Text('Already assigned', style: theme.textTheme.bodySmall)
-                            : null,
-                        trailing: alreadyAssigned
-                            ? const Icon(Icons.check_circle_outline_rounded)
-                            : const Icon(Icons.add_circle_outline_rounded),
-                        onTap: alreadyAssigned ? null : () => Navigator.of(context).pop(option),
-                      );
-                    },
-                  ),
-                ),
-              ],
-            ),
-          ),
-        );
-      },
+      isScrollControlled: true,
+      builder: (context) => _TagEditorBottomSheet(
+        song: song,
+        availableTags: availableTags,
+        existingTags: tagsForSong(song),
+        onTagsAdded: () async {
+          // Refresh song tags after dialog closes
+          if (!mounted) return;
+          try {
+            final updatedTags = await api.fetchSongTags(song.id);
+            if (!mounted) return;
+            setState(() {
+              songTagsById[song.id] = updatedTags;
+            });
+          } catch (_) {
+            // If refresh fails, the UI will still show the existing cached tags
+          }
+        },
+        api: api,
+        onUpdateState: () {
+          if (mounted) {
+            setState(() {});
+          }
+        },
+      ),
     );
-    if (selectedTag == null) return;
-
-    setState(() {
-      updatingTagsForSongIds.add(song.id);
-    });
-    try {
-      await api.addTagToSong(songId: song.id, tagId: selectedTag.id);
-      final updatedTags = await api.fetchSongTags(song.id);
-      if (!mounted) return;
-      setState(() {
-        songTagsById[song.id] = updatedTags;
-      });
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Added tag "${selectedTag.name}".')),
-      );
-    } catch (error) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Unable to add tag: $error')),
-      );
-    } finally {
-      if (mounted) {
-        setState(() {
-          updatingTagsForSongIds.remove(song.id);
-        });
-      }
-    }
   }
 
   Future<void> setSongTier(MusicTrack song, int tier) async {
@@ -299,5 +249,166 @@ mixin SongManagementMixin<T extends StatefulWidget> on State<T> {
         ),
       );
     }
+  }
+}
+
+/// Stateful bottom sheet for adding multiple tags to a song.
+class _TagEditorBottomSheet extends StatefulWidget {
+  final MusicTrack song;
+  final List<TagOption> availableTags;
+  final List<String> existingTags;
+  final VoidCallback onTagsAdded;
+  final MusicLibraryApi api;
+  final VoidCallback onUpdateState;
+
+  const _TagEditorBottomSheet({
+    required this.song,
+    required this.availableTags,
+    required this.existingTags,
+    required this.onTagsAdded,
+    required this.api,
+    required this.onUpdateState,
+  });
+
+  @override
+  State<_TagEditorBottomSheet> createState() => _TagEditorBottomSheetState();
+}
+
+class _TagEditorBottomSheetState extends State<_TagEditorBottomSheet> {
+  final Set<int> _addedTagIds = <int>{};
+  final Set<int> _addingTagIds = <int>{};
+  List<String> _currentSongTags = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _currentSongTags = List.from(widget.existingTags);
+  }
+
+  Set<String> get _allAssignedTagNames => _currentSongTags
+      .map((tag) => tag.trim().toLowerCase())
+      .toSet();
+
+  Future<void> _addTag(TagOption tagOption) async {
+    final tagNameLower = tagOption.name.toLowerCase();
+    
+    if (_allAssignedTagNames.contains(tagNameLower) || 
+        _addedTagIds.contains(tagOption.id)) {
+      return;
+    }
+
+    if (!mounted) return;
+    setState(() {
+      _addingTagIds.add(tagOption.id);
+    });
+
+    try {
+      await widget.api.addTagToSong(songId: widget.song.id, tagId: tagOption.id);
+      
+      if (!mounted) return;
+      setState(() {
+        _addedTagIds.add(tagOption.id);
+        _currentSongTags.add(tagOption.name);
+      });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Added tag "${tagOption.name}".')),
+      );
+      
+      widget.onUpdateState();
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Unable to add tag: $error')),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _addingTagIds.remove(tagOption.id);
+        });
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final sortedTags = widget.availableTags.toList(growable: false)
+      ..sort((left, right) => left.name.compareTo(right.name));
+
+    return SafeArea(
+      child: Padding(
+        padding: EdgeInsets.only(
+          bottom: MediaQuery.of(context).viewInsets.bottom,
+          left: 16,
+          right: 16,
+          top: 8,
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: <Widget>[
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  'Add tags to "${widget.song.title}"',
+                  style: theme.textTheme.titleMedium
+                      ?.copyWith(fontWeight: FontWeight.w700),
+                ),
+                TextButton(
+                  onPressed: () {
+                    widget.onTagsAdded();
+                    Navigator.of(context).pop();
+                  },
+                  child: const Text('Done'),
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            ConstrainedBox(
+              constraints: BoxConstraints(
+                maxHeight: MediaQuery.of(context).size.height * 0.6,
+              ),
+              child: ListView.separated(
+                shrinkWrap: true,
+                itemCount: sortedTags.length,
+                separatorBuilder: (_, __) => const Divider(height: 1),
+                itemBuilder: (context, index) {
+                  final option = sortedTags[index];
+                  final isAssigned = _allAssignedTagNames.contains(option.name.toLowerCase());
+                  final isAdding = _addingTagIds.contains(option.id);
+                  final isNewlyAdded = _addedTagIds.contains(option.id);
+                  final isDisabled = isAssigned || isAdding || isNewlyAdded;
+
+                  return ListTile(
+                    dense: true,
+                    enabled: !isDisabled,
+                    title: Text(option.name),
+                    subtitle: isAssigned
+                        ? Text('Already assigned', style: theme.textTheme.bodySmall)
+                        : isNewlyAdded
+                            ? Text('Added', style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.primary))
+                            : null,
+                    trailing: isAdding
+                        ? const SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                            ),
+                          )
+                        : isAssigned || isNewlyAdded
+                            ? const Icon(Icons.check_circle_outline_rounded)
+                            : const Icon(Icons.add_circle_outline_rounded),
+                    onTap: isDisabled ? null : () => _addTag(option),
+                  );
+                },
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }

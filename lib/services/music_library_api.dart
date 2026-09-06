@@ -289,7 +289,7 @@ class MusicLibraryApi {
     required double rankOrder,
   }) async {
     final response = await _client.put(
-      _buildUri('/api/SingleTracks/$singleTrackId'),
+      _buildUri('/api/Songs/$singleTrackId/rankorder'),
       headers: const <String, String>{'Content-Type': 'application/json'},
       body: jsonEncode(<String, dynamic>{
         'id': singleTrackId,

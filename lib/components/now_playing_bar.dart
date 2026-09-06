@@ -1,13 +1,17 @@
 import 'dart:async';
 
 import '../models/music_track.dart';
+import '../services/music_library_api.dart';
 import '../services/playback_controller.dart';
 import 'package:flutter/material.dart';
+import '../screens/album_songs_page.dart';
+import '../screens/artist_albums_songs_page.dart';
 
 class NowPlayingBar extends StatefulWidget {
-  const NowPlayingBar({super.key, required this.track});
+  const NowPlayingBar({super.key, required this.track, required this.api});
 
   final MusicTrack track;
+  final MusicLibraryApi api;
 
   @override
   State<NowPlayingBar> createState() => _NowPlayingBarState();
@@ -120,6 +124,56 @@ class _NowPlayingBarState extends State<NowPlayingBar> {
     return '$minutes:${remainingSeconds.toString().padLeft(2, '0')}';
   }
 
+  Future<void> _navigateToSongSource() async {
+    if (widget.track.album.isNotEmpty) {
+      // Song belongs to an album - navigate to album page
+      try {
+        final album = await widget.api.findAlbumByName(widget.track.album);
+        if (album != null) {
+          if (!mounted) return;
+          Navigator.of(context).push(
+            MaterialPageRoute<void>(
+              builder: (context) => AlbumSongsPage(album: album, api: widget.api),
+            ),
+          );
+        } else {
+          if (!mounted) return;
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Could not find album: ${widget.track.album}')),
+          );
+        }
+      } catch (error) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error finding album: $error')),
+        );
+      }
+    } else {
+      // Single track song - navigate to artist page
+      try {
+        final artist = await widget.api.findArtistByName(widget.track.artist);
+        if (artist != null) {
+          if (!mounted) return;
+          Navigator.of(context).push(
+            MaterialPageRoute<void>(
+              builder: (context) => ArtistAlbumsSongsPage(artist: artist, api: widget.api),
+            ),
+          );
+        } else {
+          if (!mounted) return;
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Could not find artist: ${widget.track.artist}')),
+          );
+        }
+      } catch (error) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error finding artist: $error')),
+        );
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -147,12 +201,17 @@ class _NowPlayingBarState extends State<NowPlayingBar> {
           ),
           const SizedBox(width: 12),
           Expanded(
-            child: Text(
-              '${widget.track.artist} — ${widget.track.title}',
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: theme.textTheme.titleMedium?.copyWith(
-                fontWeight: FontWeight.w700,
+            child: GestureDetector(
+              onTap: () => unawaited(_navigateToSongSource()),
+              child: Text(
+                '${widget.track.artist} — ${widget.track.title}',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: theme.textTheme.titleMedium?.copyWith(
+                  fontWeight: FontWeight.w700,
+                  decoration: TextDecoration.underline,
+                  color: theme.colorScheme.primary,
+                ),
               ),
             ),
           ),

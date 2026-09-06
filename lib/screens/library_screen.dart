@@ -78,7 +78,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
             if (track == null) {
               return const SizedBox.shrink();
             }
-            return NowPlayingBar(track: track);
+            return NowPlayingBar(track: track, api: widget.api);
           },
         ),
       ],

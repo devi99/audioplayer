@@ -4,14 +4,19 @@ import android.content.Context
 import android.content.Intent
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
+import io.flutter.plugin.common.BinaryMessenger
 import io.flutter.plugin.common.MethodChannel
 
 class MainActivity : FlutterActivity() {
     private val CHANNEL = "com.example.audioplayer/notification"
     private val MEDIA_CHANNEL = "com.example.audioplayer/media"
+    private var binaryMessenger: BinaryMessenger? = null
     
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
+        
+        // Store binaryMessenger for later use
+        binaryMessenger = flutterEngine.dartExecutor.binaryMessenger
         
         // Initialize notification helper with Flutter engine
         NotificationHelper.initFlutterChannel(flutterEngine)
@@ -68,23 +73,24 @@ class MainActivity : FlutterActivity() {
         }
     }
     
-    override fun onNewIntent(intent: Intent?) {
+    override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         // Handle media actions from notification
-        intent?.action?.let { action ->
+        intent.action?.let { action ->
+            val messenger = binaryMessenger ?: return@let
             when (action) {
                 "ACTION_NEXT" -> {
                     // Send next action to Flutter
-                    MethodChannel(dartExecutor.binaryMessenger, MEDIA_CHANNEL).invokeMethod("next", null)
+                    MethodChannel(messenger, MEDIA_CHANNEL).invokeMethod("next", null)
                 }
                 "ACTION_PREVIOUS" -> {
-                    MethodChannel(dartExecutor.binaryMessenger, MEDIA_CHANNEL).invokeMethod("previous", null)
+                    MethodChannel(messenger, MEDIA_CHANNEL).invokeMethod("previous", null)
                 }
                 "ACTION_PLAY" -> {
-                    MethodChannel(dartExecutor.binaryMessenger, MEDIA_CHANNEL).invokeMethod("play", null)
+                    MethodChannel(messenger, MEDIA_CHANNEL).invokeMethod("play", null)
                 }
                 "ACTION_PAUSE" -> {
-                    MethodChannel(dartExecutor.binaryMessenger, MEDIA_CHANNEL).invokeMethod("pause", null)
+                    MethodChannel(messenger, MEDIA_CHANNEL).invokeMethod("pause", null)
                 }
             }
         }

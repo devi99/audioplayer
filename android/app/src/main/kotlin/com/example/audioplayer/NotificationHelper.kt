@@ -28,13 +28,6 @@ class NotificationHelper(private val context: Context) {
         
         fun sendMediaAction(context: Context, action: String) {
             mediaChannel?.invokeMethod(action, null)
-            // Also try the main notification channel as fallback
-            try {
-                val channel = MethodChannel(MethodChannel(context, "com.example.audioplayer/notification").binaryMessenger, "com.example.audioplayer/notification")
-                channel.invokeMethod("onMediaAction", action)
-            } catch (e: Exception) {
-                // Ignore fallback failure
-            }
         }
         
         fun createNotificationChannel(context: Context) {

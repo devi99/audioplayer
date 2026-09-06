@@ -192,7 +192,7 @@ class AudioService : Service() {
             .addAction(android.R.drawable.ic_media_previous, "Previous", previousPendingIntent)
             .addAction(playPauseIcon, playPauseText, playPausePendingIntent)
             .addAction(android.R.drawable.ic_media_next, "Next", nextPendingIntent)
-            .addAction(android.R.drawable.ic_media_stop, "Stop", stopPendingIntent)
+            .addAction(android.R.drawable.ic_menu_close_clear_cancel, "Stop", stopPendingIntent)
             .build()
         
         startForeground(NOTIFICATION_ID, notification)

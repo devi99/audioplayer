@@ -162,6 +162,62 @@ class MusicLibraryApi {
         .toList(growable: false);
   }
 
+  Future<AlbumSummary?> findAlbumByName(String albumName) async {
+    if (albumName.isEmpty) return null;
+    
+    try {
+      final albums = await fetchAlbums(pageSize: 1000);
+      final normalizedAlbumName = albumName.trim().toLowerCase();
+      
+      // Try exact match first
+      for (final album in albums) {
+        if (album.title.trim().toLowerCase() == normalizedAlbumName) {
+          return album;
+        }
+      }
+      
+      // Try partial match
+      for (final album in albums) {
+        if (album.title.trim().toLowerCase().contains(normalizedAlbumName) ||
+            normalizedAlbumName.contains(album.title.trim().toLowerCase())) {
+          return album;
+        }
+      }
+    } catch (_) {
+      // If fetching fails, return null
+    }
+    
+    return null;
+  }
+
+  Future<ArtistSummary?> findArtistByName(String artistName) async {
+    if (artistName.isEmpty) return null;
+    
+    try {
+      final artists = await fetchArtists(pageSize: 1000);
+      final normalizedArtistName = artistName.trim().toLowerCase();
+      
+      // Try exact match first
+      for (final artist in artists) {
+        if (artist.name.trim().toLowerCase() == normalizedArtistName) {
+          return artist;
+        }
+      }
+      
+      // Try partial match
+      for (final artist in artists) {
+        if (artist.name.trim().toLowerCase().contains(normalizedArtistName) ||
+            normalizedArtistName.contains(artist.name.trim().toLowerCase())) {
+          return artist;
+        }
+      }
+    } catch (_) {
+      // If fetching fails, return null
+    }
+    
+    return null;
+  }
+
   Future<List<SingleTrackSummary>> fetchArtistSingleTracks(int artistId) async {
     final response = await _client.get(
       _buildUri('/api/SingleTracks/byartist/$artistId'),

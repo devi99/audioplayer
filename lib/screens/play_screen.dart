@@ -6,6 +6,8 @@ import 'package:flutter/material.dart';
 import '../models/music_track.dart';
 import '../services/music_library_api.dart';
 import '../services/playback_controller.dart';
+import 'album_songs_page.dart';
+import 'artist_albums_songs_page.dart';
 
 enum PlayFilterMode {
   blacklist,
@@ -677,6 +679,56 @@ class _PlayScreenState extends State<PlayScreen> {
     unawaited(_ensureTagsForSongs(_queue));
   }
 
+  Future<void> _navigateToSongSource(MusicTrack song) async {
+    if (song.album.isNotEmpty) {
+      // Song belongs to an album - navigate to album page
+      try {
+        final album = await widget.api.findAlbumByName(song.album);
+        if (album != null) {
+          if (!mounted) return;
+          Navigator.of(context).push(
+            MaterialPageRoute<void>(
+              builder: (context) => AlbumSongsPage(album: album, api: widget.api),
+            ),
+          );
+        } else {
+          if (!mounted) return;
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Could not find album: ${song.album}')),
+          );
+        }
+      } catch (error) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error finding album: $error')),
+        );
+      }
+    } else {
+      // Single track song - navigate to artist page
+      try {
+        final artist = await widget.api.findArtistByName(song.artist);
+        if (artist != null) {
+          if (!mounted) return;
+          Navigator.of(context).push(
+            MaterialPageRoute<void>(
+              builder: (context) => ArtistAlbumsSongsPage(artist: artist, api: widget.api),
+            ),
+          );
+        } else {
+          if (!mounted) return;
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Could not find artist: ${song.artist}')),
+          );
+        }
+      } catch (error) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error finding artist: $error')),
+        );
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -976,14 +1028,29 @@ class _PlayScreenState extends State<PlayScreen> {
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: <Widget>[
-                                  Text(
-                                    song.title,
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: theme.textTheme.titleSmall?.copyWith(
-                                      fontWeight: FontWeight.w700,
+                                  if (isCurrent)
+                                    GestureDetector(
+                                      onTap: () => unawaited(_navigateToSongSource(song)),
+                                      child: Text(
+                                        song.title,
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: theme.textTheme.titleSmall?.copyWith(
+                                          fontWeight: FontWeight.w700,
+                                          decoration: TextDecoration.underline,
+                                          color: theme.colorScheme.primary,
+                                        ),
+                                      ),
+                                    )
+                                  else
+                                    Text(
+                                      song.title,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: theme.textTheme.titleSmall?.copyWith(
+                                        fontWeight: FontWeight.w700,
+                                      ),
                                     ),
-                                  ),
                                   const SizedBox(height: 2),
                                   Text(
                                     '${song.artist} • rankOrder ${song.rankOrder.toStringAsFixed(2)}',

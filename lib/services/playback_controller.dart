@@ -26,7 +26,8 @@ class PlaybackController {
 
   static final PlaybackController instance = PlaybackController._();
 
-  final AudioPlayer _player = AudioPlayer();
+  final AudioPlayer _player = AudioPlayer()
+    ..setReleaseMode(ReleaseMode.stop);
   final ValueNotifier<NowPlayingState> nowPlaying =
       ValueNotifier<NowPlayingState>(const NowPlayingState());
   final SongCache _cache = SongCache();

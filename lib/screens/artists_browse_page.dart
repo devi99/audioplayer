@@ -123,7 +123,7 @@ class _ArtistCard extends StatelessWidget {
               ),
               const SizedBox(height: 4),
               Text(
-                '${artist.albumCount} albums',
+                '${artist.albumCount} albums, ${artist.singleTrackCount} tracks',
                 style: theme.textTheme.bodyMedium
                     ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
               ),

@@ -4,6 +4,7 @@ import 'package:http/http.dart' as http;
 
 import '../models/library_entities.dart';
 import '../models/music_track.dart';
+import 'dart:async';
 
 class TagOption {
   const TagOption({required this.id, required this.name});
@@ -159,6 +160,96 @@ class MusicLibraryApi {
         .map((item) =>
             MusicTrack.fromJson(Map<String, dynamic>.from(item as Map)))
         .toList(growable: false);
+  }
+
+  Future<List<SingleTrackSummary>> fetchArtistSingleTracks(int artistId) async {
+    final response = await _client.get(
+      _buildUri('/api/SingleTracks/byartist/$artistId'),
+    );
+
+    if (response.statusCode != 200) {
+      throw Exception(
+        'Failed to load /api/SingleTracks/byartist/$artistId (${response.statusCode})',
+      );
+    }
+
+    final decoded = jsonDecode(response.body);
+    final items = decoded is List ? decoded : const <dynamic>[];
+
+    return items
+        .map((item) =>
+            SingleTrackSummary.fromJson(Map<String, dynamic>.from(item as Map)))
+        .toList(growable: false);
+  }
+
+  Future<List<String>> fetchSingleTrackTags(int singleTrackId) async {
+    final response = await _client.get(
+      _buildUri('/api/singletracks/$singleTrackId/tags'),
+    );
+
+    if (response.statusCode != 200) {
+      throw Exception(
+        'Failed to load /api/singletracks/$singleTrackId/tags (${response.statusCode})',
+      );
+    }
+
+    final decoded = jsonDecode(response.body);
+    if (decoded is! List) {
+      return const <String>[];
+    }
+
+    final tags = <String>[];
+    for (final tag in decoded) {
+      if (tag is Map) {
+        final name = tag['name']?.toString().trim() ?? '';
+        if (name.isNotEmpty) {
+          tags.add(name);
+        }
+      }
+    }
+
+    return tags;
+  }
+
+  Future<void> addTagToSingleTrack({
+    required int singleTrackId,
+    required int tagId,
+  }) async {
+    final response = await _client.post(
+      _buildUri('/api/singletracks/$singleTrackId/tags'),
+      headers: const <String, String>{'Content-Type': 'application/json'},
+      body: jsonEncode(<String, dynamic>{'tagId': tagId}),
+    );
+
+    if (response.statusCode != 200) {
+      throw Exception(
+        'Failed to add tag to single track $singleTrackId (${response.statusCode})',
+      );
+    }
+  }
+
+  Future<void> updateSingleTrackRankOrder({
+    required int singleTrackId,
+    required double rankOrder,
+  }) async {
+    final response = await _client.put(
+      _buildUri('/api/SingleTracks/$singleTrackId'),
+      headers: const <String, String>{'Content-Type': 'application/json'},
+      body: jsonEncode(<String, dynamic>{
+        'id': singleTrackId,
+        'rankOrder': rankOrder,
+      }),
+    );
+
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw Exception(
+        'Failed to update rank order for single track $singleTrackId (${response.statusCode})',
+      );
+    }
+  }
+
+  String streamSingleTrackUrl(int singleTrackId) {
+    return _buildUri('/api/MusicStream/stream/$singleTrackId').toString();
   }
 
   Future<List<String>> fetchSongTags(String songId) async {

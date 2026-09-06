@@ -743,7 +743,7 @@ class _PlayScreenState extends State<PlayScreen> {
             children: <Widget>[
               for (var tier = 1; tier <= 5; tier++)
                 ChoiceChip(
-                  label: Text('Tier $tier'),
+                  label: Text('T$tier'),
                   selected: _selectedTiers.contains(tier),
                   onSelected: (selected) => _onTierChanged(tier, selected),
                 ),

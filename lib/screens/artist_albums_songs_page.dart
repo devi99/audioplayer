@@ -98,31 +98,32 @@ class _ArtistAlbumsSongsPageState extends State<ArtistAlbumsSongsPage> {
 
                 return Padding(
                   padding: const EdgeInsets.all(24),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: <Widget>[
-                      Text(
-                        widget.artist.name,
-                        style: theme.textTheme.headlineMedium
-                            ?.copyWith(fontWeight: FontWeight.w800),
-                      ),
-                      const SizedBox(height: 6),
-                      Text(
-                        summary,
-                        style: theme.textTheme.bodyMedium?.copyWith(
-                            color: theme.colorScheme.onSurfaceVariant),
-                      ),
-                      if (albums.isNotEmpty) ...[
-                        const SizedBox(height: 20),
+                  child: SingleChildScrollView(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: <Widget>[
                         Text(
-                          'Albums',
-                          style: theme.textTheme.headlineSmall
+                          widget.artist.name,
+                          style: theme.textTheme.headlineMedium
                               ?.copyWith(fontWeight: FontWeight.w800),
                         ),
-                        const SizedBox(height: 12),
-                        SizedBox(
-                          height: 300,
-                          child: GridView.builder(
+                        const SizedBox(height: 6),
+                        Text(
+                          summary,
+                          style: theme.textTheme.bodyMedium?.copyWith(
+                              color: theme.colorScheme.onSurfaceVariant),
+                        ),
+                        if (albums.isNotEmpty) ...[
+                          const SizedBox(height: 20),
+                          Text(
+                            'Albums',
+                            style: theme.textTheme.headlineSmall
+                                ?.copyWith(fontWeight: FontWeight.w800),
+                          ),
+                          const SizedBox(height: 12),
+                          GridView.builder(
+                            shrinkWrap: true,
+                            physics: const NeverScrollableScrollPhysics(),
                             gridDelegate:
                                 const SliverGridDelegateWithMaxCrossAxisExtent(
                               maxCrossAxisExtent: 240,
@@ -136,18 +137,18 @@ class _ArtistAlbumsSongsPageState extends State<ArtistAlbumsSongsPage> {
                                   album: albums[index], api: widget.api);
                             },
                           ),
-                        ),
-                      ],
-                      if (singleTracks.isNotEmpty) ...[
-                        const SizedBox(height: 20),
-                        Text(
-                          'Single tracks',
-                          style: theme.textTheme.headlineSmall
-                              ?.copyWith(fontWeight: FontWeight.w800),
-                        ),
-                        const SizedBox(height: 12),
-                        Expanded(
-                          child: ListView.separated(
+                        ],
+                        if (singleTracks.isNotEmpty) ...[
+                          const SizedBox(height: 20),
+                          Text(
+                            'Single tracks',
+                            style: theme.textTheme.headlineSmall
+                                ?.copyWith(fontWeight: FontWeight.w800),
+                          ),
+                          const SizedBox(height: 12),
+                          ListView.separated(
+                            shrinkWrap: true,
+                            physics: const NeverScrollableScrollPhysics(),
                             itemCount: singleTracks.length,
                             separatorBuilder: (context, index) => const Divider(
                               height: 1,
@@ -159,19 +160,19 @@ class _ArtistAlbumsSongsPageState extends State<ArtistAlbumsSongsPage> {
                                   api: widget.api);
                             },
                           ),
-                        ),
-                      ],
-                      if (albums.isEmpty && singleTracks.isEmpty) ...[
-                        const SizedBox(height: 20),
-                        Center(
-                          child: Text(
-                            'No albums or single tracks found for this artist',
-                            style: theme.textTheme.bodyMedium?.copyWith(
-                                color: theme.colorScheme.onSurfaceVariant),
+                        ],
+                        if (albums.isEmpty && singleTracks.isEmpty) ...[
+                          const SizedBox(height: 20),
+                          Center(
+                            child: Text(
+                              'No albums or single tracks found for this artist',
+                              style: theme.textTheme.bodyMedium?.copyWith(
+                                  color: theme.colorScheme.onSurfaceVariant),
+                            ),
                           ),
-                        ),
+                        ],
                       ],
-                    ],
+                    ),
                   ),
                 );
               },

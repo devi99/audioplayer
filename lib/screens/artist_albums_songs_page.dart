@@ -490,17 +490,20 @@ class _SingleTrackCardState extends State<_SingleTrackCard> {
       ),
       child: Row(
         children: <Widget>[
-          Container(
-            width: 42,
-            height: 42,
-            decoration: BoxDecoration(
-              color: theme.colorScheme.primaryContainer,
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Icon(
-              Icons.music_note_rounded,
+          IconButton(
+            onPressed: hasFilePath ? _playTrack : null,
+            icon: Icon(
+              Icons.play_arrow_rounded,
               color: theme.colorScheme.onPrimaryContainer,
             ),
+            style: IconButton.styleFrom(
+              backgroundColor: theme.colorScheme.primaryContainer,
+              fixedSize: const Size(42, 42),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+            ),
+            tooltip: hasFilePath ? 'Play' : 'Unavailable',
           ),
           const SizedBox(width: 12),
           Expanded(
@@ -595,12 +598,6 @@ class _SingleTrackCardState extends State<_SingleTrackCard> {
                       )
                     : const Icon(Icons.sell_outlined),
               ),
-              if (hasFilePath)
-                IconButton(
-                  onPressed: _playTrack,
-                  icon: const Icon(Icons.play_arrow_rounded),
-                  tooltip: 'Play',
-                ),
             ],
           ),
         ],

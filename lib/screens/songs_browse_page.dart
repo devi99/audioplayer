@@ -38,6 +38,7 @@ class _SongsBrowsePageState extends State<SongsBrowsePage> with SongManagementMi
     super.initState();
     _songsFuture = api.fetchSongs(pageSize: 0);
     unawaited(primeTagsCatalog());
+    initFloatingYouTubePlayer();
     _songFieldController = TextEditingController(text: '');
     _songFieldFocusNode = FocusNode();
     _songFieldController.addListener(_onSearchTextChanged);
@@ -273,19 +274,21 @@ class _SongsBrowsePageState extends State<SongsBrowsePage> with SongManagementMi
                       child: Row(
                         children: <Widget>[
                           IconButton(
-                            onPressed: hasStream ? () => playSong(song) : null,
+                            onPressed: () => playSongWithYouTubeFallback(song),
                             icon: Icon(
                               Icons.play_arrow_rounded,
                               color: theme.colorScheme.onPrimaryContainer,
                             ),
                             style: IconButton.styleFrom(
-                              backgroundColor: theme.colorScheme.primaryContainer,
+                              backgroundColor: hasStream
+                                  ? theme.colorScheme.primaryContainer
+                                  : Colors.red,
                               fixedSize: const Size(42, 42),
                               shape: RoundedRectangleBorder(
                                 borderRadius: BorderRadius.circular(12),
                               ),
                             ),
-                            tooltip: hasStream ? 'Play' : 'Unavailable',
+                            tooltip: hasStream ? 'Play' : 'Play from YouTube',
                           ),
                           const SizedBox(width: 12),
                           Expanded(

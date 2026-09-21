@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:youtube_player_flutter/youtube_player_flutter.dart';
 
 import '../models/music_track.dart';
 import '../services/music_library_api.dart';
 import '../services/playback_controller.dart';
+import '../components/youtube_floating_player.dart';
 
 /// A mixin that provides shared song management functionality.
 ///
@@ -249,6 +251,97 @@ mixin SongManagementMixin<T extends StatefulWidget> on State<T> {
         ),
       );
     }
+  }
+
+  /// Play a song with YouTube fallback for tracks without local files.
+  /// If the song has a local file, plays normally.
+  /// If not, searches YouTube and plays from there (if enabled).
+  Future<void> playSongWithYouTubeFallback(MusicTrack song) async {
+    final hasPlayableSource = (song.filePath ?? '').trim().isNotEmpty;
+    
+    if (hasPlayableSource) {
+      // Song has a local file, play normally
+      await playSong(song);
+      return;
+    }
+    
+    // Song has no local file, try YouTube fallback
+    try {
+      // Get the stream URL from the API first (might be a remote stream)
+      final streamUrl = api.streamSongUrl(song.id);
+      
+      // Use playTrackWithFallback which will try the stream URL first,
+      // then fall back to YouTube if that fails
+      await PlaybackController.instance.playTrackWithFallback(
+        track: song,
+        streamUrl: streamUrl,
+      );
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Unable to play "${song.title}" from YouTube: $error'),
+        ),
+      );
+    }
+  }
+
+  /// Floating YouTube player state
+  YoutubePlayerController? _floatingPlayerController;
+  OverlayEntry? _floatingPlayerOverlay;
+
+  /// Initialize the floating YouTube player.
+  /// Call this in initState of your widget.
+  void initFloatingYouTubePlayer() {
+    PlaybackController.instance.youtubeFallback.setFloatingPlayerCallback(
+      (controller, title, onDismiss) {
+        _showFloatingPlayer(controller, title, onDismiss);
+      },
+    );
+  }
+
+  /// Show the floating YouTube player.
+  void _showFloatingPlayer(
+    YoutubePlayerController controller,
+    String title,
+    VoidCallback onDismiss,
+  ) {
+    // Dismiss any existing player
+    _dismissFloatingPlayer();
+
+    _floatingPlayerController = controller;
+
+    final overlayState = Navigator.of(context).overlay!;
+    _floatingPlayerOverlay = OverlayEntry(
+      builder: (context) => YoutubeFloatingPlayer(
+        controller: controller,
+        videoTitle: title,
+        onDismiss: () {
+          onDismiss();
+          _dismissFloatingPlayer();
+        },
+        initialPosition: const Offset(20, 100),
+      ),
+    );
+
+    overlayState.insert(_floatingPlayerOverlay!);
+  }
+
+  /// Dismiss the floating YouTube player.
+  void _dismissFloatingPlayer() {
+    _floatingPlayerController?.dispose();
+    _floatingPlayerController = null;
+    
+    if (_floatingPlayerOverlay != null) {
+      _floatingPlayerOverlay!.remove();
+      _floatingPlayerOverlay = null;
+    }
+  }
+
+  @override
+  void dispose() {
+    _dismissFloatingPlayer();
+    super.dispose();
   }
 }
 

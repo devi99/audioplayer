@@ -10,6 +10,7 @@ import 'package:flutter/services.dart';
 
 import '../models/music_track.dart';
 import 'song_cache.dart';
+import 'youtube_fallback.dart';
 
 class NowPlayingState {
   const NowPlayingState({this.track});
@@ -73,7 +74,11 @@ class PlaybackController {
   final ValueNotifier<NowPlayingState> nowPlaying =
       ValueNotifier<NowPlayingState>(const NowPlayingState());
   final SongCache _cache = SongCache();
+  final YouTubeFallback _youtubeFallback = YouTubeFallback();
   final Set<String> _downloadingSongs = {};
+
+  // Expose YouTube fallback for UI integration
+  YouTubeFallback get youtubeFallback => _youtubeFallback;
   final ValueNotifier<Set<String>> downloadingSongs =
       ValueNotifier<Set<String>>({});
 
@@ -83,6 +88,9 @@ class PlaybackController {
   List<MusicTrack> _queue = [];
   int _currentQueueIndex = -1;
   bool _isQueuePlaying = false;
+  
+  // YouTube fallback settings - exposed directly as it's a simple field
+  bool useYouTubeFallback = true;
   
   // Callback for getting stream URLs (set by the UI)
   String Function(String trackId)? _getStreamUrlSync;
@@ -163,9 +171,9 @@ class PlaybackController {
     }
     
     try {
-      await playTrack(track: track, streamUrl: streamUrl);
+      await playTrackWithFallback(track: track, streamUrl: streamUrl);
     } catch (e) {
-      debugPrint('Failed to play queue track: $e');
+      debugPrint('Failed to play queue track (with fallback): $e');
       // Try to play next track if available
       if (_isQueuePlaying && _currentQueueIndex + 1 < _queue.length) {
         _currentQueueIndex++;
@@ -253,6 +261,48 @@ class PlaybackController {
     }
     
     await _playCurrentQueueTrack();
+  }
+
+  /// Play a track with YouTube fallback support.
+  /// If the provided streamUrl fails, this will attempt to find and play
+  /// a matching YouTube video (if YouTube fallback is enabled).
+  Future<void> playTrackWithFallback({
+    required MusicTrack track,
+    required String streamUrl,
+  }) async {
+    try {
+      await playTrack(track: track, streamUrl: streamUrl);
+    } catch (e) {
+      debugPrint('Failed to play track: $e');
+      
+      // Try YouTube fallback when local file is unavailable
+      if (!useYouTubeFallback) {
+        rethrow;
+      }
+      
+      debugPrint('Attempting YouTube fallback for ${track.artist} - ${track.title}');
+      
+      try {
+        // Search YouTube for a matching video and play it
+        final youtubeUrl = await _youtubeFallback.searchAndPlay(
+          track.artist,
+          track.title,
+        );
+        
+        if (youtubeUrl != null) {
+          debugPrint('YouTube fallback: Successfully started playback for ${track.artist} - ${track.title}');
+          // Consider the fallback successful - YouTube is now playing
+          return; // Success
+        } else {
+          debugPrint('YouTube fallback: No matching video found for ${track.artist} - ${track.title}');
+        }
+      } catch (e) {
+        debugPrint('YouTube fallback failed: $e');
+      }
+      
+      // If YouTube fallback also fails, rethrow the original error
+      rethrow;
+    }
   }
 
   Future<void> playTrack({
@@ -378,5 +428,15 @@ class PlaybackController {
   
   Future<void> removeFromCache(String songId) async {
     await _cache.removeFromCache(songId);
+  }
+  
+  /// Dispose of resources, including YouTube fallback client.
+  /// Call this when the controller is no longer needed.
+  void dispose() {
+    _youtubeFallback.dispose();
+    _player.dispose();
+    _queueController.close();
+    _queueIndexController.close();
+    _queuePlayingController.close();
   }
 }

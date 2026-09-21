@@ -29,6 +29,7 @@ class _AlbumSongsPageState extends State<AlbumSongsPage> with SongManagementMixi
     super.initState();
     _songsFuture = api.fetchAlbumSongs(widget.album.id);
     unawaited(primeTagsCatalog());
+    initFloatingYouTubePlayer();
   }
 
   @override
@@ -165,19 +166,21 @@ class _AlbumSongsPageState extends State<AlbumSongsPage> with SongManagementMixi
                           child: Row(
                             children: <Widget>[
                               IconButton(
-                                onPressed: hasFilePath ? () => playSong(song) : null,
+                                onPressed: () => playSongWithYouTubeFallback(song),
                                 icon: Icon(
                                   Icons.play_arrow_rounded,
                                   color: theme.colorScheme.onPrimaryContainer,
                                 ),
                                 style: IconButton.styleFrom(
-                                  backgroundColor: theme.colorScheme.primaryContainer,
+                                  backgroundColor: hasFilePath
+                                      ? theme.colorScheme.primaryContainer
+                                      : Colors.red,
                                   fixedSize: const Size(42, 42),
                                   shape: RoundedRectangleBorder(
                                     borderRadius: BorderRadius.circular(12),
                                   ),
                                 ),
-                                tooltip: hasFilePath ? 'Play' : 'Unavailable',
+                                tooltip: hasFilePath ? 'Play' : 'Play from YouTube',
                               ),
                               const SizedBox(width: 12),
                               Expanded(

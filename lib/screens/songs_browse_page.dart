@@ -272,17 +272,20 @@ class _SongsBrowsePageState extends State<SongsBrowsePage> with SongManagementMi
                       ),
                       child: Row(
                         children: <Widget>[
-                          Container(
-                            width: 42,
-                            height: 42,
-                            decoration: BoxDecoration(
-                              color: theme.colorScheme.primaryContainer,
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            child: Icon(
-                              Icons.music_note_rounded,
+                          IconButton(
+                            onPressed: hasStream ? () => playSong(song) : null,
+                            icon: Icon(
+                              Icons.play_arrow_rounded,
                               color: theme.colorScheme.onPrimaryContainer,
                             ),
+                            style: IconButton.styleFrom(
+                              backgroundColor: theme.colorScheme.primaryContainer,
+                              fixedSize: const Size(42, 42),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                            ),
+                            tooltip: hasStream ? 'Play' : 'Unavailable',
                           ),
                           const SizedBox(width: 12),
                           Expanded(
@@ -321,8 +324,8 @@ class _SongsBrowsePageState extends State<SongsBrowsePage> with SongManagementMi
                                 const SizedBox(height: 6),
                                 Text(
                                   selectedTier == null
-                                      ? 'Selected tier: Select rank'
-                                      : 'Selected tier: Tier $selectedTier (rankOrder ${rankOrder.toStringAsFixed(2)})',
+                                      ? '-'
+                                      : 'Tier $selectedTier (${rankOrder.toStringAsFixed(2)})',
                                   style: theme.textTheme.bodyMedium?.copyWith(
                                     color: theme.colorScheme.primary,
                                   ),
@@ -382,12 +385,6 @@ class _SongsBrowsePageState extends State<SongsBrowsePage> with SongManagementMi
                                         ),
                                       )
                                     : const Icon(Icons.sell_outlined),
-                              ),
-                              IconButton(
-                                onPressed:
-                                    hasStream ? () => playSong(song) : null,
-                                icon: const Icon(Icons.play_arrow_rounded),
-                                tooltip: hasStream ? 'Play' : 'Unavailable',
                               ),
                             ],
                           ),

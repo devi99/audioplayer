@@ -6,6 +6,8 @@ import 'package:flutter/material.dart';
 import '../models/music_track.dart';
 import '../services/music_library_api.dart';
 import '../services/playback_controller.dart';
+import 'album_songs_page.dart';
+import 'artist_albums_songs_page.dart';
 
 enum PlayFilterMode {
   blacklist,
@@ -29,6 +31,9 @@ class _PlayScreenState extends State<PlayScreen> {
   final PlaybackController _playbackController = PlaybackController.instance;
 
   StreamSubscription<void>? _completionSubscription;
+  StreamSubscription<List<MusicTrack>>? _queueSubscription;
+  StreamSubscription<int>? _queueIndexSubscription;
+  StreamSubscription<bool>? _queuePlayingSubscription;
 
   List<MusicTrack> _allSongs = const <MusicTrack>[];
   List<MusicTrack> _queue = const <MusicTrack>[];
@@ -164,15 +169,45 @@ class _PlayScreenState extends State<PlayScreen> {
   @override
   void initState() {
     super.initState();
-    _completionSubscription = _playbackController.onPlayerComplete.listen((_) {
-      _playNextInQueue();
+    
+    // Set the stream URL provider for the playback controller
+    _playbackController.setStreamUrlProviderSync((trackId) => widget.api.streamSongUrl(trackId));
+    
+    // Listen to queue state changes from the controller
+    _queueSubscription = _playbackController.onQueueChanged.listen((queue) {
+      if (mounted) {
+        setState(() {
+          _queue = queue;
+        });
+      }
     });
+    
+    _queueIndexSubscription = _playbackController.onQueueIndexChanged.listen((index) {
+      if (mounted) {
+        setState(() {
+          _currentQueueIndex = index;
+          _isPlayingQueue = _playbackController.isQueuePlaying;
+        });
+      }
+    });
+    
+    _queuePlayingSubscription = _playbackController.onQueuePlayingChanged.listen((isPlaying) {
+      if (mounted) {
+        setState(() {
+          _isPlayingQueue = isPlaying;
+        });
+      }
+    });
+    
     _loadSongs();
   }
 
   @override
   void dispose() {
     _completionSubscription?.cancel();
+    _queueSubscription?.cancel();
+    _queueIndexSubscription?.cancel();
+    _queuePlayingSubscription?.cancel();
     super.dispose();
   }
 
@@ -189,11 +224,14 @@ class _PlayScreenState extends State<PlayScreen> {
 
       setState(() {
         _allSongs = songs;
-        _queue = _buildTierQueue(_selectedTiers);
         _isLoading = false;
         _currentQueueIndex = -1;
         _isPlayingQueue = false;
       });
+      
+      // Update the controller's queue with the filtered queue
+      final filteredQueue = _buildTierQueue(_selectedTiers);
+      _playbackController.setQueue(filteredQueue, startIndex: -1);
 
       if (_playFilterMode == PlayFilterMode.whitelist) {
         unawaited(_ensureTagsForSongs(_songsForTiers(_selectedTiers)));
@@ -207,11 +245,13 @@ class _PlayScreenState extends State<PlayScreen> {
 
       setState(() {
         _allSongs = const <MusicTrack>[];
-        _queue = const <MusicTrack>[];
         _isLoading = false;
         _currentQueueIndex = -1;
         _isPlayingQueue = false;
       });
+      
+      // Update the controller's queue
+      _playbackController.setQueue(const [], startIndex: -1);
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -262,9 +302,9 @@ class _PlayScreenState extends State<PlayScreen> {
         return;
       }
 
-      setState(() {
-        _queue = _buildTierQueue(_selectedTiers);
-      });
+      // Update the controller's queue with the filtered queue
+      final newQueue = _buildTierQueue(_selectedTiers);
+      _playbackController.setQueue(newQueue, startIndex: -1);
       return;
     }
 
@@ -278,23 +318,10 @@ class _PlayScreenState extends State<PlayScreen> {
     final oldQueue = List<MusicTrack>.from(_queue);
     final filteredQueue = oldQueue.where(_isSongAllowedByActiveFilters).toList();
 
-    if (!_isPlayingQueue) {
-      if (mounted) {
-        setState(() {
-          _queue = filteredQueue;
-          _currentQueueIndex = -1;
-        });
-      }
-      return;
-    }
-
     if (filteredQueue.isEmpty) {
-      if (mounted) {
-        setState(() {
-          _queue = filteredQueue;
-        });
-      }
       await _stopQueuePlayback();
+      // Update controller's queue
+      _playbackController.setQueue(filteredQueue, startIndex: -1);
       return;
     }
 
@@ -305,17 +332,14 @@ class _PlayScreenState extends State<PlayScreen> {
       nextIndex = _currentQueueIndex.clamp(0, filteredQueue.length - 1);
     }
 
-    if (!mounted) {
-      return;
-    }
+    // Update the controller's queue with the filtered queue
+    _playbackController.setQueue(filteredQueue, startIndex: nextIndex);
 
-    setState(() {
-      _queue = filteredQueue;
-      _currentQueueIndex = nextIndex;
-    });
-
-    if (currentSongWasRemoved) {
-      await _playCurrentTrack();
+    if (currentSongWasRemoved && _isPlayingQueue) {
+      await _playbackController.skipToIndex(nextIndex);
+    } else if (_isPlayingQueue) {
+      // Just update the index if we're still playing
+      await _playbackController.skipToIndex(nextIndex);
     }
   }
 
@@ -344,19 +368,9 @@ class _PlayScreenState extends State<PlayScreen> {
 
     final restoredQueue = _buildTierQueue(_selectedTiers);
 
-    if (!_isPlayingQueue) {
-      setState(() {
-        _queue = restoredQueue;
-        _currentQueueIndex = -1;
-      });
-      return;
-    }
-
     if (restoredQueue.isEmpty) {
-      setState(() {
-        _queue = restoredQueue;
-      });
       await _stopQueuePlayback();
+      _playbackController.setQueue(restoredQueue, startIndex: -1);
       return;
     }
 
@@ -367,13 +381,13 @@ class _PlayScreenState extends State<PlayScreen> {
       restoredIndex = _currentQueueIndex.clamp(0, restoredQueue.length - 1);
     }
 
-    setState(() {
-      _queue = restoredQueue;
-      _currentQueueIndex = restoredIndex;
-    });
+    // Update the controller's queue
+    _playbackController.setQueue(restoredQueue, startIndex: restoredIndex);
 
-    if (currentSongMissing) {
-      await _playCurrentTrack();
+    if (currentSongMissing && _isPlayingQueue) {
+      await _playbackController.skipToIndex(restoredIndex);
+    } else if (_isPlayingQueue) {
+      await _playbackController.skipToIndex(restoredIndex);
     }
   }
 
@@ -384,12 +398,11 @@ class _PlayScreenState extends State<PlayScreen> {
 
     setState(() {
       _playFilterMode = mode;
-      _queue = _buildTierQueue(_selectedTiers);
       _currentQueueIndex = -1;
       _isPlayingQueue = false;
     });
 
-    await _playbackController.stop();
+    await _playbackController.stopQueue();
 
     if (!mounted) {
       return;
@@ -398,13 +411,16 @@ class _PlayScreenState extends State<PlayScreen> {
     if (mode == PlayFilterMode.whitelist) {
       final tierSongs = _songsForTiers(_selectedTiers);
       unawaited(_ensureTagsForSongs(tierSongs));
-      setState(() {
-        _queue = _buildTierQueue(_selectedTiers);
-      });
+      // Update the controller's queue with the new filter
+      final newQueue = _buildTierQueue(_selectedTiers);
+      _playbackController.setQueue(newQueue, startIndex: -1);
       return;
     }
 
-    unawaited(_ensureTagsForSongs(_queue));
+    // Update the controller's queue with the new filter
+    final newQueue = _buildTierQueue(_selectedTiers);
+    _playbackController.setQueue(newQueue, startIndex: -1);
+    unawaited(_ensureTagsForSongs(newQueue));
   }
 
   void _toggleWhitelistTag(String normalizedTag, bool selected) {
@@ -415,23 +431,27 @@ class _PlayScreenState extends State<PlayScreen> {
         _whitelistedTags.remove(normalizedTag);
       }
 
-      _queue = _buildTierQueue(_selectedTiers);
       _currentQueueIndex = -1;
       _isPlayingQueue = false;
     });
 
-    unawaited(_playbackController.stop());
+    unawaited(_playbackController.stopQueue());
+    // Update the controller's queue with the new filter
+    final newQueue = _buildTierQueue(_selectedTiers);
+    _playbackController.setQueue(newQueue, startIndex: -1);
   }
 
   void _toggleWhitelistNone(bool selected) {
     setState(() {
       _whitelistIncludeUntagged = selected;
-      _queue = _buildTierQueue(_selectedTiers);
       _currentQueueIndex = -1;
       _isPlayingQueue = false;
     });
 
-    unawaited(_playbackController.stop());
+    unawaited(_playbackController.stopQueue());
+    // Update the controller's queue with the new filter
+    final newQueue = _buildTierQueue(_selectedTiers);
+    _playbackController.setQueue(newQueue, startIndex: -1);
   }
 
   void _clearWhitelistSelection() {
@@ -442,24 +462,28 @@ class _PlayScreenState extends State<PlayScreen> {
     setState(() {
       _whitelistedTags.clear();
       _whitelistIncludeUntagged = false;
-      _queue = _buildTierQueue(_selectedTiers);
       _currentQueueIndex = -1;
       _isPlayingQueue = false;
     });
 
-    unawaited(_playbackController.stop());
+    unawaited(_playbackController.stopQueue());
+    // Update the controller's queue with the new filter
+    final newQueue = _buildTierQueue(_selectedTiers);
+    _playbackController.setQueue(newQueue, startIndex: -1);
   }
 
   void _setTaggedSongsOnly(bool enabled) {
     setState(() {
       _taggedSongsOnly = enabled;
-      _queue = _buildTierQueue(_selectedTiers);
       _currentQueueIndex = -1;
       _isPlayingQueue = false;
     });
 
-    unawaited(_playbackController.stop());
-    unawaited(_ensureTagsForSongs(_queue));
+    unawaited(_playbackController.stopQueue());
+    // Update the controller's queue with the new filter
+    final newQueue = _buildTierQueue(_selectedTiers);
+    _playbackController.setQueue(newQueue, startIndex: -1);
+    unawaited(_ensureTagsForSongs(newQueue));
   }
 
   bool _matchesTier(double rankOrder, int tier) {
@@ -481,6 +505,7 @@ class _PlayScreenState extends State<PlayScreen> {
 
   Future<void> _startQueuePlayback() async {
     if (_queue.isEmpty) {
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
@@ -493,69 +518,14 @@ class _PlayScreenState extends State<PlayScreen> {
       return;
     }
 
-    setState(() {
-      _isPlayingQueue = true;
-      _currentQueueIndex = 0;
-    });
-
-    await _playCurrentTrack();
+    // Use the controller to start queue playback
+    await _playbackController.playQueue(startIndex: 0);
   }
 
-  Future<void> _playCurrentTrack() async {
-    if (!_isPlayingQueue ||
-        _currentQueueIndex < 0 ||
-        _currentQueueIndex >= _queue.length) {
-      await _stopQueuePlayback();
-      return;
-    }
 
-    final track = _queue[_currentQueueIndex];
-
-    try {
-      await _playbackController.playTrack(
-        track: track,
-        streamUrl: widget.api.streamSongUrl(track.id),
-      );
-    } catch (_) {
-      if (!mounted) {
-        return;
-      }
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Skipping unavailable track: ${track.title}')),
-      );
-      _playNextInQueue();
-    }
-  }
-
-  void _playNextInQueue() {
-    if (!_isPlayingQueue) {
-      return;
-    }
-
-    final nextIndex = _currentQueueIndex + 1;
-    if (nextIndex >= _queue.length) {
-      _stopQueuePlayback();
-      return;
-    }
-
-    setState(() {
-      _currentQueueIndex = nextIndex;
-    });
-
-    _playCurrentTrack();
-  }
 
   Future<void> _stopQueuePlayback() async {
-    await _playbackController.stop();
-    if (!mounted) {
-      return;
-    }
-
-    setState(() {
-      _isPlayingQueue = false;
-      _currentQueueIndex = -1;
-    });
+    await _playbackController.stopQueue();
   }
 
   Future<void> _nextTrack() async {
@@ -563,31 +533,8 @@ class _PlayScreenState extends State<PlayScreen> {
       return;
     }
 
-    if (!_isPlayingQueue) {
-      setState(() {
-        _isPlayingQueue = true;
-        _currentQueueIndex = 0;
-      });
-      await _playCurrentTrack();
-      return;
-    }
-
-    final nextIndex = _currentQueueIndex + 1;
-    if (nextIndex >= _queue.length) {
-      await _stopQueuePlayback();
-      if (!mounted) {
-        return;
-      }
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Reached end of queue.')),
-      );
-      return;
-    }
-
-    setState(() {
-      _currentQueueIndex = nextIndex;
-    });
-    await _playCurrentTrack();
+    // Use the controller to handle next track
+    await _playbackController.playNext();
   }
 
   void _shuffleQueue() {
@@ -603,13 +550,12 @@ class _PlayScreenState extends State<PlayScreen> {
       shuffled[swapIndex] = current;
     }
 
-    setState(() {
-      _queue = shuffled;
-      _currentQueueIndex = _isPlayingQueue ? 0 : -1;
-    });
+    // Update the controller's queue
+    final wasPlaying = _isPlayingQueue;
+    _playbackController.setQueue(shuffled, startIndex: wasPlaying ? 0 : -1);
 
-    if (_isPlayingQueue) {
-      _playCurrentTrack();
+    if (wasPlaying) {
+      unawaited(_playbackController.playQueue(startIndex: 0));
     }
   }
 
@@ -622,9 +568,6 @@ class _PlayScreenState extends State<PlayScreen> {
     final updatedQueue = List<MusicTrack>.from(_queue)..removeAt(index);
 
     if (updatedQueue.isEmpty) {
-      setState(() {
-        _queue = updatedQueue;
-      });
       await _stopQueuePlayback();
       return;
     }
@@ -639,13 +582,14 @@ class _PlayScreenState extends State<PlayScreen> {
           index >= updatedQueue.length ? updatedQueue.length - 1 : index;
     }
 
-    setState(() {
-      _queue = updatedQueue;
-      _currentQueueIndex = _isPlayingQueue ? updatedCurrentIndex : -1;
-    });
+    // Update the controller's queue
+    _playbackController.setQueue(updatedQueue, startIndex: updatedCurrentIndex);
 
     if (isRemovingCurrent && _isPlayingQueue) {
-      await _playCurrentTrack();
+      await _playbackController.skipToIndex(updatedCurrentIndex);
+    } else {
+      // Just update the queue without playing if we're not removing the current track
+      _playbackController.setQueue(updatedQueue, startIndex: _currentQueueIndex);
     }
   }
 
@@ -658,22 +602,74 @@ class _PlayScreenState extends State<PlayScreen> {
     }
 
     final tierSongs = _songsForTiers(nextSelectedTiers);
+    final newQueue = _buildTierQueue(nextSelectedTiers);
 
     setState(() {
       _selectedTiers = nextSelectedTiers;
-      _queue = _buildTierQueue(nextSelectedTiers);
       _currentQueueIndex = -1;
       _isPlayingQueue = false;
     });
 
-    unawaited(_playbackController.stop());
+    // Stop playback and update the controller's queue
+    unawaited(_playbackController.stopQueue());
+    _playbackController.setQueue(newQueue, startIndex: -1);
 
     if (_playFilterMode == PlayFilterMode.whitelist) {
       unawaited(_ensureTagsForSongs(tierSongs));
       return;
     }
 
-    unawaited(_ensureTagsForSongs(_queue));
+    unawaited(_ensureTagsForSongs(newQueue));
+  }
+
+  Future<void> _navigateToSongSource(MusicTrack song) async {
+    if (song.album.isNotEmpty) {
+      // Song belongs to an album - navigate to album page
+      try {
+        final album = await widget.api.findAlbumByName(song.album);
+        if (album != null) {
+          if (!mounted) return;
+          Navigator.of(context).push(
+            MaterialPageRoute<void>(
+              builder: (context) => AlbumSongsPage(album: album, api: widget.api),
+            ),
+          );
+        } else {
+          if (!mounted) return;
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Could not find album: ${song.album}')),
+          );
+        }
+      } catch (error) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error finding album: $error')),
+        );
+      }
+    } else {
+      // Single track song - navigate to artist page
+      try {
+        final artist = await widget.api.findArtistByName(song.artist);
+        if (artist != null) {
+          if (!mounted) return;
+          Navigator.of(context).push(
+            MaterialPageRoute<void>(
+              builder: (context) => ArtistAlbumsSongsPage(artist: artist, api: widget.api),
+            ),
+          );
+        } else {
+          if (!mounted) return;
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Could not find artist: ${song.artist}')),
+          );
+        }
+      } catch (error) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error finding artist: $error')),
+        );
+      }
+    }
   }
 
   @override
@@ -742,7 +738,7 @@ class _PlayScreenState extends State<PlayScreen> {
             children: <Widget>[
               for (var tier = 1; tier <= 5; tier++)
                 ChoiceChip(
-                  label: Text('Tier $tier'),
+                  label: Text('T$tier'),
                   selected: _selectedTiers.contains(tier),
                   onSelected: (selected) => _onTierChanged(tier, selected),
                 ),
@@ -975,14 +971,29 @@ class _PlayScreenState extends State<PlayScreen> {
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: <Widget>[
-                                  Text(
-                                    song.title,
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: theme.textTheme.titleSmall?.copyWith(
-                                      fontWeight: FontWeight.w700,
+                                  if (isCurrent)
+                                    GestureDetector(
+                                      onTap: () => unawaited(_navigateToSongSource(song)),
+                                      child: Text(
+                                        song.title,
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: theme.textTheme.titleSmall?.copyWith(
+                                          fontWeight: FontWeight.w700,
+                                          decoration: TextDecoration.underline,
+                                          color: theme.colorScheme.primary,
+                                        ),
+                                      ),
+                                    )
+                                  else
+                                    Text(
+                                      song.title,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: theme.textTheme.titleSmall?.copyWith(
+                                        fontWeight: FontWeight.w700,
+                                      ),
                                     ),
-                                  ),
                                   const SizedBox(height: 2),
                                   Text(
                                     '${song.artist} • rankOrder ${song.rankOrder.toStringAsFixed(2)}',

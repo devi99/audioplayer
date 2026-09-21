@@ -78,29 +78,21 @@ class YouTubeFallback {
         debugPrint('YouTube fallback: Starting in-app playback for ${video.title}');
         
         // Create the controller with the video ID
-        final controller = YoutubePlayerController(
-          initialVideoId: videoId,
-          flags: const YoutubePlayerFlags(
-            autoPlay: true,
+        final controller = YoutubePlayerController.fromVideoId(
+          videoId: videoId,
+          autoPlay: true,
+          params: const YoutubePlayerParams(
+            showControls: true,
             mute: false,
             loop: false,
-            hideControls: false,
-            hideThumbnail: false,
-            showLiveFullscreenButton: false,
-            enableCaption: true,
-            forceHD: false,
-            useHybridComposition: true,
           ),
         );
-        
-        // Explicitly play the video
-        controller.play();
         
         // Show the floating player
         showFloatingPlayer!(controller, video.title, () {
           debugPrint('YouTube fallback: Floating player dismissed');
-          controller.pause();
-          controller.dispose();
+          controller.pauseVideo();
+          controller.close();
         });
         
         return youtubeUrl;

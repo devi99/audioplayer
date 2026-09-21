@@ -20,10 +20,12 @@ import '../components/youtube_floating_player.dart';
 /// - addTagToSong(), setSongTier(), playSong()
 ///
 /// Usage:
-///   class _MyState extends State<MyWidget> with SongManagementMixin {
-///     @override
-///     MusicLibraryApi get api => widget.api;
-///   }
+/// ```dart
+/// class _MyState extends State<MyWidget> with SongManagementMixin {
+///   @override
+///   MusicLibraryApi get api => widget.api;
+/// }
+/// ```
 mixin SongManagementMixin<T extends StatefulWidget> on State<T> {
   // Abstract getter to access the API from the widget
   MusicLibraryApi get api;
@@ -329,7 +331,8 @@ mixin SongManagementMixin<T extends StatefulWidget> on State<T> {
 
   /// Dismiss the floating YouTube player.
   void _dismissFloatingPlayer() {
-    _floatingPlayerController?.dispose();
+    _floatingPlayerController?.pauseVideo();
+    _floatingPlayerController?.close();
     _floatingPlayerController = null;
     
     if (_floatingPlayerOverlay != null) {

@@ -38,7 +38,7 @@ class _YoutubeFloatingPlayerState extends State<YoutubeFloatingPlayer> {
 
   @override
   void dispose() {
-    widget.controller.dispose();
+    widget.controller.close();
     super.dispose();
   }
 
@@ -105,6 +105,7 @@ class _YoutubeFloatingPlayerState extends State<YoutubeFloatingPlayer> {
                         icon: const Icon(Icons.close_rounded, size: 18),
                         tooltip: 'Close',
                         onPressed: () {
+                          widget.controller.pauseVideo();
                           widget.onDismiss();
                         },
                         style: IconButton.styleFrom(
@@ -124,22 +125,7 @@ class _YoutubeFloatingPlayerState extends State<YoutubeFloatingPlayer> {
                     ),
                     child: YoutubePlayer(
                       controller: widget.controller,
-                      showVideoProgressIndicator: true,
-                      progressIndicatorColor: theme.colorScheme.primary,
-                      progressColors: ProgressBarColors(
-                        playedColor: theme.colorScheme.primary,
-                        handleColor: theme.colorScheme.primary,
-                        backgroundColor: theme.colorScheme.surfaceContainerHighest,
-                        bufferedColor: theme.colorScheme.primaryContainer,
-                      ),
                       aspectRatio: 16 / 9,
-                      onReady: () {
-                        debugPrint('YouTube player: Ready');
-                        // Ensure video is playing
-                        if (!widget.controller.value.isPlaying) {
-                          widget.controller.play();
-                        }
-                      },
                     ),
                   ),
                 ),

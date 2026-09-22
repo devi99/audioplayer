@@ -213,8 +213,9 @@ class _SongsBrowsePageState extends State<SongsBrowsePage> with SongManagementMi
           });
         }
 
-        return Padding(
-          padding: const EdgeInsets.all(24),
+        return wrapWithYouTubeLoading(
+          Padding(
+            padding: const EdgeInsets.all(24),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: <Widget>[
@@ -483,6 +484,7 @@ class _SongsBrowsePageState extends State<SongsBrowsePage> with SongManagementMi
               ),
             ],
           ),
+        ),
         );
       },
     );

@@ -39,6 +39,51 @@ mixin SongManagementMixin<T extends StatefulWidget> on State<T> {
   final Map<String, List<String>> songTagsById = <String, List<String>>{};
   final Map<String, double> rankOrderBySongId = <String, double>{};
 
+  // YouTube fallback loading state
+  bool _isLoadingYouTubeFallback = false;
+
+  /// Returns true if YouTube fallback is currently loading
+  bool get isLoadingYouTubeFallback => _isLoadingYouTubeFallback;
+
+  /// Builds a loading indicator widget for YouTube fallback
+  /// Call this from your build method and include it in a Stack
+  Widget buildYouTubeLoadingIndicator() {
+    if (!_isLoadingYouTubeFallback) return const SizedBox.shrink();
+
+    return Center(
+      child: Card(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const SizedBox(
+                width: 24,
+                height: 24,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              ),
+              const SizedBox(width: 16),
+              Text(
+                'Searching YouTube...',
+                style: Theme.of(context).textTheme.bodyLarge,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Wraps a widget with a Stack that includes the YouTube loading indicator
+  Widget wrapWithYouTubeLoading(Widget child) {
+    return Stack(
+      children: [
+        child,
+        buildYouTubeLoadingIndicator(),
+      ],
+    );
+  }
+
   Future<void> primeTagsCatalog() async {
     try {
       final tags = await api.fetchTags();
@@ -295,11 +340,33 @@ mixin SongManagementMixin<T extends StatefulWidget> on State<T> {
   /// Initialize the floating YouTube player.
   /// Call this in initState of your widget.
   void initFloatingYouTubePlayer() {
-    PlaybackController.instance.youtubeFallback.setFloatingPlayerCallback(
+    final youtubeFallback = PlaybackController.instance.youtubeFallback;
+
+    // Set up floating player callback
+    youtubeFallback.setFloatingPlayerCallback(
       (controller, title, onDismiss) {
         _showFloatingPlayer(controller, title, onDismiss);
       },
     );
+
+    // Set up loading state callback
+    youtubeFallback.onLoadingChanged = (isLoading) {
+      if (mounted) {
+        setState(() => _isLoadingYouTubeFallback = isLoading);
+      }
+    };
+
+    // Set up error callback
+    youtubeFallback.onError = (message) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(message),
+            backgroundColor: Theme.of(context).colorScheme.error,
+          ),
+        );
+      }
+    };
   }
 
   /// Show the floating YouTube player.

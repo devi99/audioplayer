@@ -20,6 +20,14 @@ class YouTubeFallback {
   /// This is set by the UI to display the player
   Function(YoutubePlayerController, String, VoidCallback)? showFloatingPlayer;
 
+  /// Callback for loading state changes
+  /// UI can use this to show/hide a loading indicator
+  Function(bool)? onLoadingChanged;
+
+  /// Callback for error messages
+  /// UI can use this to display error toasts
+  Function(String)? onError;
+
   /// Search for a YouTube video matching the artist and title.
   /// 
   /// If [showFloatingPlayer] callback is set, displays an in-app player.
@@ -30,6 +38,9 @@ class YouTubeFallback {
     }
 
     try {
+      // Emit loading started
+      onLoadingChanged?.call(true);
+
       // Build search query: "Artist - Title"
       final query = '$artist - $title';
       
@@ -53,7 +64,10 @@ class YouTubeFallback {
       }
       
       if (video == null) {
+        // Emit error
+        onError?.call('No YouTube video found for "$artist - $title"');
         debugPrint('YouTube fallback: No videos found for "$artist - $title"');
+        onLoadingChanged?.call(false);
         return null;
       }
       
@@ -68,8 +82,11 @@ class YouTubeFallback {
         debugPrint('YouTube fallback: Desktop platform detected, opening in browser');
         if (await canLaunchUrl(Uri.parse(youtubeUrl))) {
           await launchUrl(Uri.parse(youtubeUrl), mode: LaunchMode.externalApplication);
+          onLoadingChanged?.call(false);
           return youtubeUrl;
         }
+        onError?.call('Could not open browser for YouTube video');
+        onLoadingChanged?.call(false);
         return null;
       }
       
@@ -77,30 +94,42 @@ class YouTubeFallback {
       if (showFloatingPlayer != null) {
         debugPrint('YouTube fallback: Starting in-app playback for ${video.title}');
         
-        // Create the controller with the video ID
-        final controller = YoutubePlayerController.fromVideoId(
-          videoId: videoId,
-          autoPlay: true,
-          params: const YoutubePlayerParams(
-            showControls: true,
-            mute: false,
-            loop: false,
-          ),
-        );
-        
-        // Show the floating player
-        showFloatingPlayer!(controller, video.title, () {
-          debugPrint('YouTube fallback: Floating player dismissed');
-          controller.pauseVideo();
-          controller.close();
-        });
-        
-        return youtubeUrl;
+        try {
+          // Create the controller with the video ID
+          final controller = YoutubePlayerController.fromVideoId(
+            videoId: videoId,
+            autoPlay: true,
+            params: const YoutubePlayerParams(
+              showControls: true,
+              mute: false,
+              loop: false,
+            ),
+          );
+          
+          // Show the floating player
+          showFloatingPlayer!(controller, video.title, () {
+            debugPrint('YouTube fallback: Floating player dismissed');
+            controller.pauseVideo();
+            controller.close();
+            onLoadingChanged?.call(false);
+          });
+          
+          onLoadingChanged?.call(false);
+          return youtubeUrl;
+        } catch (e) {
+          onError?.call('Failed to initialize YouTube player: $e');
+          onLoadingChanged?.call(false);
+          return null;
+        }
       }
       
       // Otherwise return the URL for external playback
+      onLoadingChanged?.call(false);
       return youtubeUrl;
     } catch (e) {
+      // Emit error
+      onError?.call('YouTube search failed: $e');
+      onLoadingChanged?.call(false);
       debugPrint('YouTube fallback search failed: $e');
       return null;
     }

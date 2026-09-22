@@ -45,7 +45,8 @@ class _AlbumSongsPageState extends State<AlbumSongsPage> with SongManagementMixi
         ),
         title: Text(widget.album.title),
       ),
-      body: DecoratedBox(
+      body: wrapWithYouTubeLoading(
+        DecoratedBox(
         decoration: const BoxDecoration(
           gradient: LinearGradient(
             begin: Alignment.topLeft,
@@ -292,6 +293,7 @@ class _AlbumSongsPageState extends State<AlbumSongsPage> with SongManagementMixi
           },
         ),
       ),
+    ),
     );
   }
 }

@@ -104,6 +104,16 @@ class _NowPlayingBarState extends State<NowPlayingBar> {
             onPressed: () => Navigator.of(context).pop(),
             child: const Text('Close'),
           ),
+          if (_isCached)
+            TextButton(
+              onPressed: () async {
+                Navigator.of(context).pop();
+                await controller.removeFromCache(widget.track.id);
+                await _checkCacheStatus();
+              },
+              style: TextButton.styleFrom(foregroundColor: Colors.red),
+              child: const Text('Delete from Cache'),
+            ),
           if (!_isCached)
             TextButton(
               onPressed: () async {

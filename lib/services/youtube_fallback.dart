@@ -95,7 +95,7 @@ class YouTubeFallback {
       
       if (video == null) {
         // Emit error
-        onError?.call('No YouTube video found for "$artist - $title"');
+        onError?.call('No YouTube video found for "$artist - $title". Try a different search term.');
         debugPrint('YouTube fallback: No videos found for "$artist - $title"');
         onLoadingChanged?.call(false);
         return null;
@@ -109,8 +109,14 @@ class YouTubeFallback {
       return await _playFromVideoId(videoId, artist, title);
       
     } catch (e) {
-      // Emit error
-      onError?.call('YouTube search failed: $e');
+      // Emit user-friendly error message
+      String errorMessage;
+      if (e is TimeoutException) {
+        errorMessage = 'YouTube search timed out. Please check your internet connection and try again.';
+      } else {
+        errorMessage = 'YouTube search failed. Please try again.';
+      }
+      onError?.call(errorMessage);
       onLoadingChanged?.call(false);
       debugPrint('YouTube fallback search failed: $e');
       return null;
@@ -166,7 +172,7 @@ class YouTubeFallback {
         onLoadingChanged?.call(false);
         return youtubeUrl;
       }
-      onError?.call('Could not open browser for YouTube video');
+      onError?.call('Could not open browser. Please try again or open YouTube manually.');
       onLoadingChanged?.call(false);
       return null;
     }
@@ -198,7 +204,7 @@ class YouTubeFallback {
         onLoadingChanged?.call(false);
         return youtubeUrl;
       } catch (e) {
-        onError?.call('Failed to initialize YouTube player: $e');
+        onError?.call('Failed to initialize YouTube player. Please try again.');
         onLoadingChanged?.call(false);
         return null;
       }

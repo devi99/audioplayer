@@ -64,7 +64,7 @@ mixin SongManagementMixin<T extends StatefulWidget> on State<T> {
               ),
               const SizedBox(width: 16),
               Text(
-                'Searching YouTube...',
+                'Searching YouTube (max 15s)...',
                 style: Theme.of(context).textTheme.bodyLarge,
               ),
             ],

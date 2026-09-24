@@ -80,6 +80,8 @@ class LocalFileQueueManager {
         _currentItemController.add(_currentItem);
       } else {
         debugPrint('[QueueManager] loadQueue: preserving existing _currentItem=${_currentItem?.id}');
+        // Still notify so that any new listeners (like QueueScreen just mounted) get the current value
+        _currentItemController.add(_currentItem);
       }
       // Otherwise, keep the existing _currentItem
     } catch (error) {

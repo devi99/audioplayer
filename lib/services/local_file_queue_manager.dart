@@ -262,23 +262,23 @@ class LocalFileQueueManager {
       // Set current item in API (without reloading queue)
       await _setCurrentItemInApi(item.id);
 
-      // Create a minimal MusicTrack from the queue item for playback
-      final track = MusicTrack(
-        id: '', // Not used when streaming by path
-        title: item.title ?? 'Unknown',
-        artist: item.artist ?? 'Unknown',
-        album: item.album ?? '',
-        durationSeconds: 0,
-        rankOrder: -1,
-        tags: const [],
-        filePath: item.fullFilePath,
-      );
-
-      debugPrint('[QueueManager] playItem: streaming by path, playing');
-      await _playbackController.playTrack(
-        track: track,
-        streamUrl: _api!.streamSongByPath(item.fullFilePath),
-      );
+      // Find the song by filePath and play it
+      debugPrint('[QueueManager] playItem: finding song by filePath...');
+      final stopwatch = Stopwatch()..start();
+      final song = await _findSongByFilePath(item.fullFilePath);
+      stopwatch.stop();
+      debugPrint('[QueueManager] playItem: song lookup took ${stopwatch.elapsedMilliseconds}ms');
+      
+      if (song != null) {
+        debugPrint('[QueueManager] playItem: found song ${song.id}, playing');
+        await _playbackController.playTrack(
+          track: song,
+          streamUrl: _api!.streamSongUrl(song.id),
+        );
+      } else {
+        debugPrint('[QueueManager] playItem: Could not find song for filePath: ${item.fullFilePath}');
+        throw Exception('Could not find song for filePath: ${item.fullFilePath}');
+      }
     } catch (error) {
       debugPrint('[QueueManager] playItem: Failed to play queue item: $error');
       rethrow;

@@ -427,7 +427,9 @@ class MusicLibraryApi {
 
   /// Stream a song directly by its file path
   String streamSongByPath(String filePath) {
-    return _buildUri('/api/MusicStream/stream/${Uri.encodeComponent(filePath)}').toString();
+    // Encode each path segment separately to handle slashes in filePath
+    final encoded = filePath.split('/').map(Uri.encodeComponent).join('/');
+    return _buildUri('/api/MusicStream/stream/$encoded').toString();
   }
 
   // LocalFileQueue API methods

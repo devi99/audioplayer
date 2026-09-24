@@ -9,6 +9,7 @@ import 'albums_browse_page.dart';
 import 'artists_browse_page.dart';
 import 'library_navigation_pane.dart';
 import 'play_screen.dart';
+import 'queue_screen.dart';
 import 'songs_browse_page.dart';
 
 class LibraryScreen extends StatefulWidget {
@@ -68,6 +69,10 @@ class _LibraryScreenState extends State<LibraryScreen> {
                   key: const ValueKey('play'),
                   api: widget.api,
                 ),
+              LibrarySection.queue => QueueScreen(
+                  key: const ValueKey('queue'),
+                  api: widget.api,
+                ),
             },
           ),
         ),
@@ -124,6 +129,11 @@ class _LibraryScreenState extends State<LibraryScreen> {
         BottomNavigationBarItem(
           icon: Icon(Icons.play_circle_outline_rounded),
           activeIcon: Icon(Icons.play_circle_rounded),
+          label: '',
+        ),
+        BottomNavigationBarItem(
+          icon: Icon(Icons.queue_music_outlined),
+          activeIcon: Icon(Icons.queue_music_rounded),
           label: '',
         ),
       ],

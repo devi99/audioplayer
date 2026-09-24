@@ -6,6 +6,7 @@ import '../services/playback_controller.dart';
 import 'package:flutter/material.dart';
 import '../screens/album_songs_page.dart';
 import '../screens/artist_albums_songs_page.dart';
+import '../services/local_file_queue_manager.dart';
 
 class NowPlayingBar extends StatefulWidget {
   const NowPlayingBar({super.key, required this.track, required this.api});
@@ -240,6 +241,11 @@ class _NowPlayingBarState extends State<NowPlayingBar> {
                 ),
               ),
             ),
+          ),
+          IconButton(
+            onPressed: () => unawaited(LocalFileQueueManager.instance.playNext()),
+            icon: const Icon(Icons.skip_next_rounded),
+            tooltip: 'Next in queue',
           ),
           IconButton(
             onPressed: _showSongDetails,

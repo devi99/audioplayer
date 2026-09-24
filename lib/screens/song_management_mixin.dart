@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:youtube_player_flutter/youtube_player_flutter.dart';
 
 import '../models/music_track.dart';
+import '../services/local_file_queue_manager.dart';
 import '../services/music_library_api.dart';
 import '../services/playback_controller.dart';
 import '../components/youtube_floating_player.dart';
@@ -30,6 +31,9 @@ mixin SongManagementMixin<T extends StatefulWidget> on State<T> {
   // Abstract getter to access the API from the widget
   MusicLibraryApi get api;
 
+  // Queue manager instance
+  final LocalFileQueueManager _queueManager = LocalFileQueueManager.instance;
+
   // State for tags management
   List<TagOption> availableTags = const <TagOption>[];
   bool isLoadingAvailableTags = false;
@@ -44,6 +48,12 @@ mixin SongManagementMixin<T extends StatefulWidget> on State<T> {
 
   /// Returns true if YouTube fallback is currently loading
   bool get isLoadingYouTubeFallback => _isLoadingYouTubeFallback;
+
+  @override
+  void initState() {
+    super.initState();
+    _queueManager.setApi(api);
+  }
 
   /// Builds a loading indicator widget for YouTube fallback
   /// Call this from your build method and include it in a Stack
@@ -301,14 +311,14 @@ mixin SongManagementMixin<T extends StatefulWidget> on State<T> {
   }
 
   /// Play a song with YouTube fallback for tracks without local files.
-  /// If the song has a local file, plays normally.
+  /// If the song has a local file, adds it to the queue and plays if queue was empty.
   /// If not, searches YouTube and plays from there directly (skipping stream attempt).
   Future<void> playSongWithYouTubeFallback(MusicTrack song) async {
     final hasPlayableSource = (song.filePath ?? '').trim().isNotEmpty;
     
     if (hasPlayableSource) {
-      // Song has a local file, play normally
-      await playSong(song);
+      // Song has a local file, add to queue and play if queue was empty
+      await _queueManager.addAndPlayIfEmpty(song);
       return;
     }
     

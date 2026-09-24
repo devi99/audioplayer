@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 
 import '../models/library_entities.dart';
+import '../models/local_file_queue_item.dart';
 import '../models/music_track.dart';
 import 'dart:async';
 
@@ -406,6 +407,88 @@ class MusicLibraryApi {
 
   String streamSongUrl(String songId) {
     return _buildUri('/api/MusicStream/stream/$songId').toString();
+  }
+
+  // LocalFileQueue API methods
+
+  /// Get all items in the local file queue
+  Future<List<LocalFileQueueItem>> fetchLocalFileQueue() async {
+    final response = await _client.get(_buildUri('/api/LocalFileQueue'));
+    if (response.statusCode != 200) {
+      throw Exception('Failed to load local file queue (${response.statusCode})');
+    }
+    final decoded = jsonDecode(response.body);
+    final items = decoded is List ? decoded : const <dynamic>[];
+    return items
+        .map((item) => LocalFileQueueItem.fromJson(Map<String, dynamic>.from(item as Map)))
+        .toList(growable: false);
+  }
+
+  /// Add a song to the local file queue
+  Future<LocalFileQueueItem> addToLocalFileQueue({
+    required String fullFilePath,
+    String? album,
+    String? artist,
+    String? title,
+  }) async {
+    final response = await _client.post(
+      _buildUri('/api/LocalFileQueue'),
+      headers: const <String, String>{'Content-Type': 'application/json'},
+      body: jsonEncode(<String, dynamic>{
+        'fullFilePath': fullFilePath,
+        'album': album,
+        'artist': artist,
+        'title': title,
+      }),
+    );
+    if (response.statusCode != 200) {
+      throw Exception('Failed to add to local file queue (${response.statusCode})');
+    }
+    final decoded = jsonDecode(response.body);
+    return LocalFileQueueItem.fromJson(Map<String, dynamic>.from(decoded as Map));
+  }
+
+  /// Remove a song from the local file queue
+  Future<void> removeFromLocalFileQueue(int queueItemId) async {
+    final response = await _client.delete(
+      _buildUri('/api/LocalFileQueue/$queueItemId'),
+    );
+    if (response.statusCode != 200) {
+      throw Exception('Failed to remove from local file queue (${response.statusCode})');
+    }
+  }
+
+  /// Clear the local file queue
+  Future<void> clearLocalFileQueue() async {
+    final response = await _client.delete(
+      _buildUri('/api/LocalFileQueue/clear'),
+    );
+    if (response.statusCode != 200) {
+      throw Exception('Failed to clear local file queue (${response.statusCode})');
+    }
+  }
+
+  /// Set the currently playing song in the queue
+  Future<void> setLocalFileQueueCurrentlyPlaying(int queueItemId) async {
+    final response = await _client.post(
+      _buildUri('/api/LocalFileQueue/$queueItemId/play'),
+    );
+    if (response.statusCode != 200) {
+      throw Exception('Failed to set currently playing (${response.statusCode})');
+    }
+  }
+
+  /// Get the next song in the queue
+  Future<LocalFileQueueItem?> getNextLocalFileQueueTrack() async {
+    final response = await _client.get(_buildUri('/api/LocalFileQueue/next'));
+    if (response.statusCode != 200) {
+      return null;
+    }
+    final decoded = jsonDecode(response.body);
+    if (decoded == null) {
+      return null;
+    }
+    return LocalFileQueueItem.fromJson(Map<String, dynamic>.from(decoded as Map));
   }
 
   Future<String?> lookupArtistImage(String artistName) {

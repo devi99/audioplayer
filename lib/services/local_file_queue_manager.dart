@@ -184,33 +184,14 @@ class LocalFileQueueManager {
     if (_api == null) return;
 
     try {
-      await setCurrentItem(item.id);
+      // Update current item immediately for UI responsiveness
       _currentItem = item;
       _currentItemController.add(_currentItem);
 
-      // First try: the queue item's ID might be the song ID (if API uses song IDs)
-      // This avoids an extra API call if the backend stores song IDs in the queue
-      try {
-        final testTrack = MusicTrack(
-          id: item.id.toString(),
-          title: item.title ?? 'Unknown',
-          artist: item.artist ?? 'Unknown',
-          album: item.album ?? '',
-          durationSeconds: 0,
-          rankOrder: -1,
-          tags: const [],
-          filePath: item.fullFilePath,
-        );
-        await _playbackController.playTrack(
-          track: testTrack,
-          streamUrl: _api!.streamSongUrl(item.id.toString()),
-        );
-        return; // Success
-      } catch (e) {
-        debugPrint('Direct queue ID playback failed, trying filePath lookup: $e');
-      }
+      // Set current item in API
+      await setCurrentItem(item.id);
 
-      // Fallback: find the song by filePath
+      // Find the song by filePath and play it
       final song = await _findSongByFilePath(item.fullFilePath);
       if (song != null) {
         await _playbackController.playTrack(

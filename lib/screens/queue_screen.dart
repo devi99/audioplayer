@@ -31,9 +31,14 @@ class _QueueScreenState extends State<QueueScreen> {
     return StreamBuilder<List<LocalFileQueueItem>>(
       stream: _queueManager.onQueueChanged,
       initialData: const [],
-      builder: (context, snapshot) {
-        final queue = snapshot.data ?? [];
-        final currentItemId = _queueManager.currentItem?.id;
+      builder: (context, queueSnapshot) {
+        final queue = queueSnapshot.data ?? [];
+        
+        return StreamBuilder<LocalFileQueueItem?>(
+          stream: _queueManager.onCurrentItemChanged,
+          initialData: null,
+          builder: (context, currentSnapshot) {
+            final currentItemId = currentSnapshot.data?.id;
 
         return SingleChildScrollView(
           padding: const EdgeInsets.all(24),
@@ -150,6 +155,8 @@ class _QueueScreenState extends State<QueueScreen> {
               ),
             ],
           ),
+        );
+          },
         );
       },
     );

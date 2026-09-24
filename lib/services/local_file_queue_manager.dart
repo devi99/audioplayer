@@ -83,6 +83,7 @@ class LocalFileQueueManager {
   }
 
   /// Add a song to the queue
+  /// Note: This does NOT call loadQueue() - the caller should call it if needed
   Future<LocalFileQueueItem?> addToQueue({
     required String fullFilePath,
     String? album,
@@ -98,7 +99,6 @@ class LocalFileQueueManager {
         artist: artist,
         title: title,
       );
-      await loadQueue();
       return item;
     } catch (error) {
       debugPrint('Failed to add to local file queue: $error');
@@ -138,6 +138,9 @@ class LocalFileQueueManager {
     );
 
     if (item == null) return;
+
+    // Reload queue to get the new item
+    await loadQueue();
 
     // If queue was empty before adding, start playing
     if (previousLength == 0) {

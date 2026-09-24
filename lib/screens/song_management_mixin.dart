@@ -302,7 +302,7 @@ mixin SongManagementMixin<T extends StatefulWidget> on State<T> {
 
   /// Play a song with YouTube fallback for tracks without local files.
   /// If the song has a local file, plays normally.
-  /// If not, searches YouTube and plays from there (if enabled).
+  /// If not, searches YouTube and plays from there directly (skipping stream attempt).
   Future<void> playSongWithYouTubeFallback(MusicTrack song) async {
     final hasPlayableSource = (song.filePath ?? '').trim().isNotEmpty;
     
@@ -312,16 +312,11 @@ mixin SongManagementMixin<T extends StatefulWidget> on State<T> {
       return;
     }
     
-    // Song has no local file, try YouTube fallback
+    // Song has no local file, go directly to YouTube fallback
     try {
-      // Get the stream URL from the API first (might be a remote stream)
-      final streamUrl = api.streamSongUrl(song.id);
-      
-      // Use playTrackWithFallback which will try the stream URL first,
-      // then fall back to YouTube if that fails
-      await PlaybackController.instance.playTrackWithFallback(
-        track: song,
-        streamUrl: streamUrl,
+      await PlaybackController.instance.youtubeFallback.searchAndPlay(
+        song.artist,
+        song.title,
       );
     } catch (error) {
       if (!mounted) return;

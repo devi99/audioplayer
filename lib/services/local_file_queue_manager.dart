@@ -51,13 +51,16 @@ class LocalFileQueueManager {
     if (_isLoading) return;
 
     _isLoading = true;
+    debugPrint('[QueueManager] loadQueue called, forceRefreshCurrent=$forceRefreshCurrent, hasCurrent=${_currentItem != null}');
     try {
       final newQueue = await _api!.fetchLocalFileQueue();
       final hasCurrent = _currentItem != null;
+      debugPrint('[QueueManager] loadQueue: fetched ${newQueue.length} items, hasCurrent=$hasCurrent');
       
       // Update queue
       _queue = newQueue;
       _queueController.add(List.unmodifiable(_queue));
+      debugPrint('[QueueManager] loadQueue: queue updated, _queue.length=${_queue.length}');
       
       // Update current item if needed
       if (forceRefreshCurrent || !hasCurrent) {
@@ -68,11 +71,15 @@ class LocalFileQueueManager {
                 orElse: () => _queue.first,
               )
             : null;
+        debugPrint('[QueueManager] loadQueue: setting _currentItem from API, _currentItem=${_currentItem?.id}');
         _currentItemController.add(_currentItem);
       } else if (hasCurrent && !_queue.any((item) => item.id == _currentItem!.id)) {
         // Current item is no longer in queue, clear it
         _currentItem = null;
+        debugPrint('[QueueManager] loadQueue: current item not in queue, clearing');
         _currentItemController.add(_currentItem);
+      } else {
+        debugPrint('[QueueManager] loadQueue: preserving existing _currentItem=${_currentItem?.id}');
       }
       // Otherwise, keep the existing _currentItem
     } catch (error) {
@@ -129,6 +136,7 @@ class LocalFileQueueManager {
   Future<void> addAndPlayIfEmpty(MusicTrack song) async {
     if (_api == null) return;
 
+    debugPrint('[QueueManager] addAndPlayIfEmpty: previousLength=${_queue.length}');
     final previousLength = _queue.length;
     final item = await addToQueue(
       fullFilePath: song.filePath!,
@@ -136,6 +144,7 @@ class LocalFileQueueManager {
       artist: song.artist,
       title: song.title,
     );
+    debugPrint('[QueueManager] addAndPlayIfEmpty: added item ${item?.id}');
 
     if (item == null) return;
 
@@ -144,8 +153,13 @@ class LocalFileQueueManager {
 
     // If queue was empty before adding, start playing
     if (previousLength == 0) {
-      // Set current item locally
-      _currentItem = item;
+      debugPrint('[QueueManager] addAndPlayIfEmpty: queue was empty, setting current item');
+      // Find the item in the queue (it should be there after loadQueue)
+      // If not found, fall back to the response item
+      final queueItem = _queue.firstWhere((i) => i.id == item.id, orElse: () => item);
+      debugPrint('[QueueManager] addAndPlayIfEmpty: found queueItem ${queueItem.id}');
+      _currentItem = queueItem;
+      debugPrint('[QueueManager] addAndPlayIfEmpty: _currentItem set to ${_currentItem?.id}');
       _currentItemController.add(_currentItem);
       
       // Set current item in API
@@ -205,6 +219,7 @@ class LocalFileQueueManager {
   Future<void> setCurrentItem(int queueItemId) async {
     if (_api == null) return;
 
+    debugPrint('[QueueManager] setCurrentItem: queueItemId=$queueItemId');
     try {
       // Find the item in our queue
       LocalFileQueueItem? item;
@@ -212,12 +227,16 @@ class LocalFileQueueManager {
         item = _queue.firstWhere((i) => i.id == queueItemId);
       } catch (e) {
         // Not found
+        debugPrint('[QueueManager] setCurrentItem: item not found in queue');
         item = null;
       }
       
       if (item != null) {
         _currentItem = item;
+        debugPrint('[QueueManager] setCurrentItem: _currentItem set to ${item.id}');
         _currentItemController.add(_currentItem);
+      } else {
+        debugPrint('[QueueManager] setCurrentItem: item is null, not updating _currentItem');
       }
       
       // Update in API (don't reload, just persist)
@@ -231,9 +250,11 @@ class LocalFileQueueManager {
   Future<void> playItem(LocalFileQueueItem item) async {
     if (_api == null) return;
 
+    debugPrint('[QueueManager] playItem: item=${item.id}, filePath=${item.fullFilePath}');
     try {
       // Update current item immediately for UI responsiveness
       _currentItem = item;
+      debugPrint('[QueueManager] playItem: _currentItem set to ${item.id}');
       _currentItemController.add(_currentItem);
 
       // Set current item in API (without reloading queue)
@@ -242,16 +263,17 @@ class LocalFileQueueManager {
       // Find the song by filePath and play it
       final song = await _findSongByFilePath(item.fullFilePath);
       if (song != null) {
+        debugPrint('[QueueManager] playItem: found song ${song.id}, playing');
         await _playbackController.playTrack(
           track: song,
           streamUrl: _api!.streamSongUrl(song.id),
         );
       } else {
-        debugPrint('Could not find song for filePath: ${item.fullFilePath}');
+        debugPrint('[QueueManager] playItem: Could not find song for filePath: ${item.fullFilePath}');
         throw Exception('Could not find song for filePath: ${item.fullFilePath}');
       }
     } catch (error) {
-      debugPrint('Failed to play queue item: $error');
+      debugPrint('[QueueManager] playItem: Failed to play queue item: $error');
       rethrow;
     }
   }

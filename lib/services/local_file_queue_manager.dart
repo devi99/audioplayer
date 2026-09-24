@@ -139,8 +139,6 @@ class LocalFileQueueManager {
 
     if (item == null) return;
 
-    await loadQueue();
-
     // If queue was empty before adding, start playing
     if (previousLength == 0) {
       // Set current item in API and update local state

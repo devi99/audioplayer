@@ -37,12 +37,22 @@ class _NowPlayingBarState extends State<NowPlayingBar> {
 
   Future<void> _checkCacheStatus() async {
     final controller = PlaybackController.instance;
-    final isCached = await controller.isSongCached(widget.track.id);
-    if (mounted) {
-      setState(() {
-        _isCached = isCached;
-        _isCheckingCache = false;
-      });
+    try {
+      final isCached = await controller.isSongCached(widget.track.id);
+      if (mounted) {
+        setState(() {
+          _isCached = isCached;
+          _isCheckingCache = false;
+        });
+      }
+    } catch (e) {
+      // If checking cache fails, assume not cached
+      if (mounted) {
+        setState(() {
+          _isCached = false;
+          _isCheckingCache = false;
+        });
+      }
     }
   }
 

@@ -39,6 +39,7 @@ class _QueueScreenState extends State<QueueScreen> {
           initialData: null,
           builder: (context, currentSnapshot) {
             final currentItemId = currentSnapshot.data?.id;
+            debugPrint('[QueueScreen] currentSnapshot: hasData=${currentSnapshot.hasData}, data=${currentSnapshot.data?.id}');
 
         return SingleChildScrollView(
           padding: const EdgeInsets.all(24),
@@ -80,6 +81,7 @@ class _QueueScreenState extends State<QueueScreen> {
                   itemBuilder: (context, index) {
                     final item = queue[index];
                     final isCurrent = item.id == currentItemId;
+                    debugPrint('[QueueScreen] item ${item.id}: isCurrent=$isCurrent, currentItemId=$currentItemId');
 
                     return Container(
                       padding: const EdgeInsets.symmetric(

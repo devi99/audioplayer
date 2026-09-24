@@ -437,7 +437,7 @@ class MusicLibraryApi {
     final items = decoded is List ? decoded : const <dynamic>[];
     return items
         .map((item) => LocalFileQueueItem.fromJson(Map<String, dynamic>.from(item as Map)))
-        .toList(growable: false);
+        .toList();
   }
 
   /// Add a song to the local file queue

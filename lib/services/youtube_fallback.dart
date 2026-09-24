@@ -69,7 +69,7 @@ class YouTubeFallback {
 
     try {
       // Emit loading started
-      onLoadingChanged?.call(true);
+      try { onLoadingChanged?.call(true); } catch (_) {}
       debugPrint('YouTube fallback: Starting search for "$artist - $title"');
 
       // Wrap search in timeout - max 15 seconds
@@ -95,9 +95,9 @@ class YouTubeFallback {
       
       if (video == null) {
         // Emit error
-        onError?.call('No YouTube video found for "$artist - $title". Try a different search term.');
+        try { onError?.call('No YouTube video found for "$artist - $title". Try a different search term.'); } catch (_) {}
         debugPrint('YouTube fallback: No videos found for "$artist - $title"');
-        onLoadingChanged?.call(false);
+        try { onLoadingChanged?.call(false); } catch (_) {}
         return null;
       }
       
@@ -116,8 +116,8 @@ class YouTubeFallback {
       } else {
         errorMessage = 'YouTube search failed. Please try again.';
       }
-      onError?.call(errorMessage);
-      onLoadingChanged?.call(false);
+      try { onError?.call(errorMessage); } catch (_) {}
+      try { onLoadingChanged?.call(false); } catch (_) {}
       debugPrint('YouTube fallback search failed: $e');
       return null;
     } finally {
@@ -167,14 +167,21 @@ class YouTubeFallback {
     
     if (isDesktop) {
       debugPrint('YouTube fallback: Desktop platform detected, opening in browser');
-      if (await canLaunchUrl(Uri.parse(youtubeUrl))) {
-        await launchUrl(Uri.parse(youtubeUrl), mode: LaunchMode.externalApplication);
-        onLoadingChanged?.call(false);
-        return youtubeUrl;
+      try {
+        if (await canLaunchUrl(Uri.parse(youtubeUrl))) {
+          await launchUrl(Uri.parse(youtubeUrl), mode: LaunchMode.externalApplication);
+          try { onLoadingChanged?.call(false); } catch (_) {}
+          return youtubeUrl;
+        }
+        try { onError?.call('Could not open browser. Please try again or open YouTube manually.'); } catch (_) {}
+        try { onLoadingChanged?.call(false); } catch (_) {}
+        return null;
+      } catch (e) {
+        try { onError?.call('Failed to open YouTube in browser: ${e.toString()}'); } catch (_) {}
+        try { onLoadingChanged?.call(false); } catch (_) {}
+        debugPrint('YouTube fallback: Failed to launch URL: $e');
+        return null;
       }
-      onError?.call('Could not open browser. Please try again or open YouTube manually.');
-      onLoadingChanged?.call(false);
-      return null;
     }
     
     // If we have a callback to show floating player, use in-app playback (mobile only)
@@ -198,20 +205,20 @@ class YouTubeFallback {
           debugPrint('YouTube fallback: Floating player dismissed');
           controller.pauseVideo();
           controller.close();
-          onLoadingChanged?.call(false);
+          try { onLoadingChanged?.call(false); } catch (_) {}
         });
         
-        onLoadingChanged?.call(false);
+        try { onLoadingChanged?.call(false); } catch (_) {}
         return youtubeUrl;
       } catch (e) {
-        onError?.call('Failed to initialize YouTube player. Please try again.');
-        onLoadingChanged?.call(false);
+        try { onError?.call('Failed to initialize YouTube player. Please try again.'); } catch (_) {}
+        try { onLoadingChanged?.call(false); } catch (_) {}
         return null;
       }
     }
     
     // Otherwise return the URL for external playback
-    onLoadingChanged?.call(false);
+    try { onLoadingChanged?.call(false); } catch (_) {}
     return youtubeUrl;
   }
 

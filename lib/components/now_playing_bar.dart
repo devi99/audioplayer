@@ -60,9 +60,15 @@ class _NowPlayingBarState extends State<NowPlayingBar> {
     final controller = PlaybackController.instance;
     
     // Get the most up-to-date cache size
-    final cacheSizeBytes = await controller.getCacheSize();
+    int cacheSizeBytes = 0;
+    List<String> cachedSongIds = [];
+    try {
+      cacheSizeBytes = await controller.getCacheSize();
+      cachedSongIds = await controller.getCachedSongIds();
+    } catch (e) {
+      // If getting cache info fails, use defaults
+    }
     final cacheSizeMb = cacheSizeBytes / (1024 * 1024);
-    final cachedSongIds = await controller.getCachedSongIds();
     
     if (!mounted) return;
     

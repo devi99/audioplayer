@@ -88,6 +88,25 @@ class LocalFileQueueManager {
     }
   }
 
+  /// Find a song by its file path
+  Future<MusicTrack?> _findSongByFilePath(String filePath) async {
+    try {
+      // Fetch all songs and find the one with matching filePath
+      final allSongs = await _api!.fetchAllSongs();
+      try {
+        return allSongs.firstWhere(
+          (song) => song.filePath == filePath,
+        );
+      } catch (e) {
+        // No matching song found
+        return null;
+      }
+    } catch (e) {
+      debugPrint('Failed to find song by filePath: $e');
+      return null;
+    }
+  }
+
   /// Add a song to the queue and start playing if the queue was empty
   Future<void> addAndPlayIfEmpty(MusicTrack song) async {
     if (_api == null) return;
@@ -106,7 +125,16 @@ class LocalFileQueueManager {
 
     // If queue was empty before adding, start playing
     if (previousLength == 0) {
-      await playItem(item);
+      // Mark as currently playing in queue
+      await setCurrentItem(item.id);
+      _currentItem = item;
+      _currentItemController.add(_currentItem);
+
+      // Play using the original song's ID (we have it available here)
+      await _playbackController.playTrack(
+        track: song,
+        streamUrl: _api!.streamSongUrl(song.id),
+      );
     }
   }
 
@@ -157,24 +185,45 @@ class LocalFileQueueManager {
 
     try {
       await setCurrentItem(item.id);
+      _currentItem = item;
+      _currentItemController.add(_currentItem);
 
-      final track = MusicTrack(
-        id: item.id.toString(),
-        title: item.title ?? 'Unknown',
-        artist: item.artist ?? 'Unknown',
-        album: item.album ?? '',
-        durationSeconds: 0,
-        rankOrder: -1,
-        tags: const [],
-        filePath: item.fullFilePath,
-      );
+      // First try: the queue item's ID might be the song ID (if API uses song IDs)
+      // This avoids an extra API call if the backend stores song IDs in the queue
+      try {
+        final testTrack = MusicTrack(
+          id: item.id.toString(),
+          title: item.title ?? 'Unknown',
+          artist: item.artist ?? 'Unknown',
+          album: item.album ?? '',
+          durationSeconds: 0,
+          rankOrder: -1,
+          tags: const [],
+          filePath: item.fullFilePath,
+        );
+        await _playbackController.playTrack(
+          track: testTrack,
+          streamUrl: _api!.streamSongUrl(item.id.toString()),
+        );
+        return; // Success
+      } catch (e) {
+        debugPrint('Direct queue ID playback failed, trying filePath lookup: $e');
+      }
 
-      await _playbackController.playTrack(
-        track: track,
-        streamUrl: _api!.streamSongUrl(item.id.toString()),
-      );
+      // Fallback: find the song by filePath
+      final song = await _findSongByFilePath(item.fullFilePath);
+      if (song != null) {
+        await _playbackController.playTrack(
+          track: song,
+          streamUrl: _api!.streamSongUrl(song.id),
+        );
+      } else {
+        debugPrint('Could not find song for filePath: ${item.fullFilePath}');
+        throw Exception('Could not find song for filePath: ${item.fullFilePath}');
+      }
     } catch (error) {
       debugPrint('Failed to play queue item: $error');
+      rethrow;
     }
   }
 

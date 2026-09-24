@@ -117,6 +117,22 @@ class MusicLibraryApi {
         .toList(growable: false);
   }
 
+  /// Fetch all songs (all pages)
+  Future<List<MusicTrack>> fetchAllSongs() async {
+    final items = <MusicTrack>[];
+    var pageNumber = 1;
+    const pageSize = 1000; // Large page size to minimize requests
+
+    while (true) {
+      final page = await fetchSongs(pageNumber: pageNumber, pageSize: pageSize);
+      if (page.isEmpty) break;
+      items.addAll(page);
+      pageNumber++;
+    }
+
+    return items;
+  }
+
   Future<List<MusicTrack>> fetchSearchSongTitles(String title) async {
     final response = await _client.post(
       _buildUri('/api/Songs/search-title-only'),

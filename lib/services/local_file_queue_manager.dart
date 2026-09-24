@@ -144,8 +144,12 @@ class LocalFileQueueManager {
 
     // If queue was empty before adding, start playing
     if (previousLength == 0) {
-      // Set current item in API and update local state
-      await setCurrentItem(item.id);
+      // Set current item locally
+      _currentItem = item;
+      _currentItemController.add(_currentItem);
+      
+      // Set current item in API
+      await _setCurrentItemInApi(item.id);
 
       // Play using the original song's ID (we have it available here)
       await _playbackController.playTrack(

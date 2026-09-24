@@ -434,6 +434,27 @@ class MusicLibraryApi {
     ).toString();
   }
 
+  /// Fetch a song by its file path
+  Future<MusicTrack?> fetchSongByFilePath(String filePath) async {
+    final response = await _client.post(
+      _buildUri('/api/Songs/filepath'),
+      headers: const <String, String>{'Content-Type': 'application/json'},
+      body: jsonEncode(<String, dynamic>{'filePath': filePath}),
+    );
+    if (response.statusCode == 200) {
+      final decoded = jsonDecode(response.body);
+      if (decoded != null) {
+        return MusicTrack.fromJson(Map<String, dynamic>.from(decoded as Map));
+      }
+      return null;
+    } else if (response.statusCode == 404) {
+      // Song not found
+      return null;
+    } else {
+      throw Exception('Failed to fetch song by filePath (${response.statusCode})');
+    }
+  }
+
   // LocalFileQueue API methods
 
   /// Get all items in the local file queue

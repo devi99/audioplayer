@@ -115,19 +115,10 @@ class LocalFileQueueManager {
     }
   }
 
-  /// Find a song by its file path
+  /// Find a song by its file path using the API endpoint
   Future<MusicTrack?> _findSongByFilePath(String filePath) async {
     try {
-      // Fetch all songs and find the one with matching filePath
-      final allSongs = await _api!.fetchAllSongs();
-      try {
-        return allSongs.firstWhere(
-          (song) => song.filePath == filePath,
-        );
-      } catch (e) {
-        // No matching song found
-        return null;
-      }
+      return await _api!.fetchSongByFilePath(filePath);
     } catch (e) {
       debugPrint('Failed to find song by filePath: $e');
       return null;

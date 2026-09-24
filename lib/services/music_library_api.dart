@@ -457,7 +457,8 @@ class MusicLibraryApi {
         'title': title,
       }),
     );
-    if (response.statusCode != 200) {
+    // Accept 200 (OK) or 201 (Created)
+    if (response.statusCode != 200 && response.statusCode != 201) {
       throw Exception('Failed to add to local file queue (${response.statusCode})');
     }
     final decoded = jsonDecode(response.body);
@@ -469,7 +470,8 @@ class MusicLibraryApi {
     final response = await _client.delete(
       _buildUri('/api/LocalFileQueue/$queueItemId'),
     );
-    if (response.statusCode != 200) {
+    // Accept 200 (OK) or 204 (No Content)
+    if (response.statusCode != 200 && response.statusCode != 204) {
       throw Exception('Failed to remove from local file queue (${response.statusCode})');
     }
   }
@@ -479,7 +481,8 @@ class MusicLibraryApi {
     final response = await _client.delete(
       _buildUri('/api/LocalFileQueue/clear'),
     );
-    if (response.statusCode != 200) {
+    // Accept 200 (OK) or 204 (No Content)
+    if (response.statusCode != 200 && response.statusCode != 204) {
       throw Exception('Failed to clear local file queue (${response.statusCode})');
     }
   }
@@ -489,7 +492,8 @@ class MusicLibraryApi {
     final response = await _client.post(
       _buildUri('/api/LocalFileQueue/$queueItemId/play'),
     );
-    if (response.statusCode != 200) {
+    // Accept 200 (OK) or 204 (No Content)
+    if (response.statusCode != 200 && response.statusCode != 204) {
       throw Exception('Failed to set currently playing (${response.statusCode})');
     }
   }

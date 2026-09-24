@@ -425,6 +425,11 @@ class MusicLibraryApi {
     return _buildUri('/api/MusicStream/stream/$songId').toString();
   }
 
+  /// Stream a song directly by its file path
+  String streamSongByPath(String filePath) {
+    return _buildUri('/api/MusicStream/stream/${Uri.encodeComponent(filePath)}').toString();
+  }
+
   // LocalFileQueue API methods
 
   /// Get all items in the local file queue

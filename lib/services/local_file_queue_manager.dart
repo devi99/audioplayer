@@ -45,18 +45,36 @@ class LocalFileQueueManager {
   }
 
   /// Load the queue from the API
-  Future<void> loadQueue() async {
+  /// If we already have a current item, preserve it unless it's not in the queue anymore
+  Future<void> loadQueue({bool forceRefreshCurrent = false}) async {
     if (_api == null) return;
     if (_isLoading) return;
 
     _isLoading = true;
     try {
-      _queue = await _api!.fetchLocalFileQueue();
-      _currentItem = _queue.isNotEmpty
-          ? _queue.firstWhere((item) => item.isCurrentlyPlaying, orElse: () => _queue.first)
-          : null;
+      final newQueue = await _api!.fetchLocalFileQueue();
+      final hasCurrent = _currentItem != null;
+      
+      // Update queue
+      _queue = newQueue;
       _queueController.add(List.unmodifiable(_queue));
-      _currentItemController.add(_currentItem);
+      
+      // Update current item if needed
+      if (forceRefreshCurrent || !hasCurrent) {
+        // No local current item, use API's isCurrentlyPlaying flag
+        _currentItem = _queue.isNotEmpty
+            ? _queue.firstWhere(
+                (item) => item.isCurrentlyPlaying, 
+                orElse: () => _queue.first,
+              )
+            : null;
+        _currentItemController.add(_currentItem);
+      } else if (hasCurrent && !_queue.any((item) => item.id == _currentItem!.id)) {
+        // Current item is no longer in queue, clear it
+        _currentItem = null;
+        _currentItemController.add(_currentItem);
+      }
+      // Otherwise, keep the existing _currentItem
     } catch (error) {
       debugPrint('Failed to load local file queue: $error');
     } finally {
@@ -125,10 +143,8 @@ class LocalFileQueueManager {
 
     // If queue was empty before adding, start playing
     if (previousLength == 0) {
-      // Mark as currently playing in queue
+      // Set current item in API and update local state
       await setCurrentItem(item.id);
-      _currentItem = item;
-      _currentItemController.add(_currentItem);
 
       // Play using the original song's ID (we have it available here)
       await _playbackController.playTrack(
@@ -168,12 +184,39 @@ class LocalFileQueueManager {
   }
 
   /// Set the currently playing item in the queue
-  Future<void> setCurrentItem(int queueItemId) async {
+  /// This updates the API but does NOT reload the queue - the caller is responsible
+  /// for updating the local state
+  Future<void> _setCurrentItemInApi(int queueItemId) async {
     if (_api == null) return;
 
     try {
       await _api!.setLocalFileQueueCurrentlyPlaying(queueItemId);
-      await loadQueue();
+    } catch (error) {
+      debugPrint('Failed to set current queue item in API: $error');
+    }
+  }
+
+  /// Set the currently playing item in the queue and update local state
+  Future<void> setCurrentItem(int queueItemId) async {
+    if (_api == null) return;
+
+    try {
+      // Find the item in our queue
+      LocalFileQueueItem? item;
+      try {
+        item = _queue.firstWhere((i) => i.id == queueItemId);
+      } catch (e) {
+        // Not found
+        item = null;
+      }
+      
+      if (item != null) {
+        _currentItem = item;
+        _currentItemController.add(_currentItem);
+      }
+      
+      // Update in API (don't reload, just persist)
+      await _setCurrentItemInApi(queueItemId);
     } catch (error) {
       debugPrint('Failed to set current queue item: $error');
     }
@@ -188,8 +231,8 @@ class LocalFileQueueManager {
       _currentItem = item;
       _currentItemController.add(_currentItem);
 
-      // Set current item in API
-      await setCurrentItem(item.id);
+      // Set current item in API (without reloading queue)
+      await _setCurrentItemInApi(item.id);
 
       // Find the song by filePath and play it
       final song = await _findSongByFilePath(item.fullFilePath);

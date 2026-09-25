@@ -26,7 +26,7 @@ class _DebugConsoleState extends State<DebugConsole> {
   final dynamic _originalDebugPrint = debugPrint;
 
   bool _isDisposed = false;
-  bool _isVisible = true;
+  bool _isVisible = false; // Start hidden by default
 
   @override
   void initState() {
@@ -100,6 +100,14 @@ class _DebugConsoleState extends State<DebugConsole> {
     return '${timestamp.hour.toString().padLeft(2, '0')}:${timestamp.minute.toString().padLeft(2, '0')}:${timestamp.second.toString().padLeft(2, '0')}';
   }
 
+  double _getBottomOffset() {
+    // On Android, account for bottomNavigationBar height
+    if (defaultTargetPlatform == TargetPlatform.android) {
+      return kBottomNavigationBarHeight + 16;
+    }
+    return 16;
+  }
+
   @override
   Widget build(BuildContext context) {
     // Only show on mobile platforms when enabled
@@ -108,112 +116,22 @@ class _DebugConsoleState extends State<DebugConsole> {
     }
 
     final theme = Theme.of(context);
-    // Calculate bottom offset to avoid overlapping with bottomNavigationBar on Android
-    final bottomOffset = _getBottomOffset(context);
-
-    // If not visible, just show the floating toggle button
-    if (!_isVisible) {
-      return Positioned(
-        bottom: bottomOffset + 16,
-        right: 16,
-        child: _buildToggleButton(theme),
-      );
-    }
 
     return Stack(
+      clipBehavior: Clip.none,
       children: [
-        // The console itself
-        Positioned(
-          left: 0,
-          right: 0,
-          bottom: bottomOffset,
-          child: Listener(
-            behavior: HitTestBehavior.translucent,
-            child: SizedBox(
-              height: _consoleHeight,
-              child: Material(
-                elevation: 4,
-                child: Container(
-                  decoration: BoxDecoration(
-                    color: theme.colorScheme.surfaceContainerHighest,
-                    border: Border(
-                      top: BorderSide(
-                        color: theme.colorScheme.outline.withValues(alpha: 0.5),
-                        width: 1,
-                      ),
-                    ),
-                  ),
-                  child: Column(
-                    children: [
-                      // Header with toggle and clear buttons
-                      Container(
-                        color: theme.colorScheme.surfaceContainerHighest,
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                        child: Row(
-                          children: [
-                            IconButton(
-                              icon: Icon(
-                                _isVisible ? Icons.keyboard_arrow_down_rounded : Icons.keyboard_arrow_up_rounded,
-                                size: 18,
-                              ),
-                              tooltip: _isVisible ? 'Hide console' : 'Show console',
-                              onPressed: _toggleVisibility,
-                              style: IconButton.styleFrom(
-                                padding: const EdgeInsets.all(4),
-                                visualDensity: VisualDensity.compact,
-                              ),
-                            ),
-                            Text(
-                              'DEBUG CONSOLE',
-                              style: theme.textTheme.bodySmall?.copyWith(
-                                fontWeight: FontWeight.bold,
-                                color: theme.colorScheme.onSurfaceVariant,
-                              ),
-                            ),
-                            const Spacer(),
-                            IconButton(
-                              icon: const Icon(Icons.clear_rounded, size: 16),
-                              tooltip: 'Clear',
-                              onPressed: _clearMessages,
-                              style: IconButton.styleFrom(
-                                padding: const EdgeInsets.all(4),
-                                visualDensity: VisualDensity.compact,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      // Message list
-                      Expanded(
-                        child: ListView.builder(
-                          controller: _scrollController,
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                          itemCount: _messages.length,
-                          itemBuilder: (context, index) {
-                            final message = _messages[index];
-                            return Text(
-                              '[${_formatTime(message.timestamp)}] ${message.text}',
-                              style: theme.textTheme.bodySmall?.copyWith(
-                                color: theme.colorScheme.onSurface,
-                                fontFamily: 'monospace',
-                                fontSize: 11,
-                              ),
-                              maxLines: 2,
-                              overflow: TextOverflow.ellipsis,
-                            );
-                          },
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
+        // The console panel - only when visible
+        if (_isVisible)
+          Positioned(
+            left: 0,
+            right: 0,
+            bottom: _getBottomOffset(),
+            height: _consoleHeight,
+            child: _buildConsolePanel(theme),
           ),
-        ),
-        // Floating toggle button (shown when console is visible too, for easy access)
+        // Floating toggle button
         Positioned(
-          bottom: bottomOffset + _consoleHeight + 8,
+          bottom: _isVisible ? _getBottomOffset() + _consoleHeight + 8 : _getBottomOffset(),
           right: 16,
           child: _buildToggleButton(theme),
         ),
@@ -221,18 +139,88 @@ class _DebugConsoleState extends State<DebugConsole> {
     );
   }
 
-  double _getBottomOffset(BuildContext context) {
-    // On Android, account for bottomNavigationBar height
-    if (defaultTargetPlatform == TargetPlatform.android) {
-      return kBottomNavigationBarHeight;
-    }
-    return 0.0;
+  Widget _buildConsolePanel(ThemeData theme) {
+    return IgnorePointer(
+      child: Container(
+        height: _consoleHeight,
+        width: double.infinity,
+        decoration: BoxDecoration(
+          color: Colors.black87,
+          border: Border(
+            top: BorderSide(
+              color: theme.colorScheme.primary.withValues(alpha: 0.5),
+              width: 1,
+            ),
+          ),
+        ),
+        child: Column(
+          children: [
+            // Header with buttons
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              child: Row(
+                children: [
+                  IconButton(
+                    icon: const Icon(Icons.keyboard_arrow_down_rounded, size: 18),
+                    tooltip: 'Hide console',
+                    onPressed: _toggleVisibility,
+                    style: IconButton.styleFrom(
+                      padding: const EdgeInsets.all(4),
+                      visualDensity: VisualDensity.compact,
+                    ),
+                  ),
+                  Text(
+                    'DEBUG CONSOLE',
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white,
+                    ),
+                  ),
+                  const Spacer(),
+                  IconButton(
+                    icon: const Icon(Icons.clear_rounded, size: 16),
+                    tooltip: 'Clear',
+                    onPressed: _clearMessages,
+                    style: IconButton.styleFrom(
+                      padding: const EdgeInsets.all(4),
+                      visualDensity: VisualDensity.compact,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            // Message list
+            Expanded(
+              child: ListView.builder(
+                controller: _scrollController,
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                itemCount: _messages.length,
+                itemBuilder: (context, index) {
+                  final message = _messages[index];
+                  return Text(
+                    '[${_formatTime(message.timestamp)}] ${message.text}',
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: Colors.white,
+                      fontFamily: 'monospace',
+                      fontSize: 10,
+                    ),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  );
+                },
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   Widget _buildToggleButton(ThemeData theme) {
     return Material(
       elevation: 4,
       borderRadius: BorderRadius.circular(_toggleButtonSize / 2),
+      color: theme.colorScheme.primary,
       child: InkWell(
         borderRadius: BorderRadius.circular(_toggleButtonSize / 2),
         onTap: _toggleVisibility,
@@ -242,6 +230,7 @@ class _DebugConsoleState extends State<DebugConsole> {
           child: Icon(
             _isVisible ? Icons.keyboard_arrow_down_rounded : Icons.keyboard_arrow_up_rounded,
             size: 24,
+            color: Colors.white,
           ),
         ),
       ),

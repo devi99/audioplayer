@@ -147,7 +147,8 @@ class _LibraryScreenState extends State<LibraryScreen> {
 
   @override
   Widget build(BuildContext context) {
-    // Calculate bottom padding to avoid overlap with bottomNavigationBar on Android
+    // On Android, we need to add padding to the body to account for bottomNavigationBar
+    // so the DebugConsole toggle button doesn't overlap with it
     final bottomPadding = _isAndroid ? kBottomNavigationBarHeight : 0.0;
 
     return Scaffold(
@@ -166,17 +167,15 @@ class _LibraryScreenState extends State<LibraryScreen> {
               ),
             ),
             child: SafeArea(
-              child: _isAndroid ? _buildContent() : _buildDesktopNavigation(),
+              // Add bottom padding to prevent content from being hidden behind bottomNavigationBar
+              child: Padding(
+                padding: EdgeInsets.only(bottom: bottomPadding),
+                child: _isAndroid ? _buildContent() : _buildDesktopNavigation(),
+              ),
             ),
           ),
-          // Debug console at the bottom of the screen (only on mobile)
-          // Positioned above the bottomNavigationBar on Android
-          Positioned(
-            left: 0,
-            right: 0,
-            bottom: bottomPadding,
-            child: const DebugConsole(),
-          ),
+          // Debug console - handles its own positioning
+          const DebugConsole(),
         ],
       ),
       bottomNavigationBar: _isAndroid ? _buildAndroidBottomNav() : null,

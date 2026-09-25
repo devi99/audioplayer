@@ -1,9 +1,10 @@
 import '../services/music_library_api.dart';
 
 import '../components/now_playing_bar.dart' show NowPlayingBar;
-import '../components/debug_console.dart' show DebugConsole;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+
+import '../screens/debug_screen.dart' show DebugScreen;
 
 import '../services/playback_controller.dart';
 import 'albums_browse_page.dart';
@@ -74,6 +75,9 @@ class _LibraryScreenState extends State<LibraryScreen> {
                   key: const ValueKey('queue'),
                   api: widget.api,
                 ),
+              LibrarySection.debug => const DebugScreen(
+                  key: ValueKey('debug'),
+                ),
             },
           ),
         ),
@@ -137,6 +141,11 @@ class _LibraryScreenState extends State<LibraryScreen> {
           activeIcon: Icon(Icons.queue_music_rounded),
           label: '',
         ),
+        BottomNavigationBarItem(
+          icon: Icon(Icons.bug_report_outlined),
+          activeIcon: Icon(Icons.bug_report_rounded),
+          label: '',
+        ),
       ],
       showSelectedLabels: false,
       showUnselectedLabels: false,
@@ -166,8 +175,6 @@ class _LibraryScreenState extends State<LibraryScreen> {
               child: _isAndroid ? _buildContent() : _buildDesktopNavigation(),
             ),
           ),
-          // Debug console - handles its own positioning
-          const Positioned.fill(child: DebugConsole()),
         ],
       ),
       bottomNavigationBar: _isAndroid ? _buildAndroidBottomNav() : null,

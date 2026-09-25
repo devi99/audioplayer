@@ -1,6 +1,7 @@
 import '../services/music_library_api.dart';
 
 import '../components/now_playing_bar.dart' show NowPlayingBar;
+import '../components/debug_console.dart' show DebugConsole;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
@@ -146,22 +147,37 @@ class _LibraryScreenState extends State<LibraryScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // Calculate bottom padding to avoid overlap with bottomNavigationBar on Android
+    final bottomPadding = _isAndroid ? kBottomNavigationBarHeight : 0.0;
+
     return Scaffold(
-      body: DecoratedBox(
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: <Color>[
-              Color(0xFF09111D),
-              Color(0xFF0B1726),
-              Color(0xFF111826),
-            ],
+      body: Stack(
+        children: [
+          DecoratedBox(
+            decoration: const BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: <Color>[
+                  Color(0xFF09111D),
+                  Color(0xFF0B1726),
+                  Color(0xFF111826),
+                ],
+              ),
+            ),
+            child: SafeArea(
+              child: _isAndroid ? _buildContent() : _buildDesktopNavigation(),
+            ),
           ),
-        ),
-        child: SafeArea(
-          child: _isAndroid ? _buildContent() : _buildDesktopNavigation(),
-        ),
+          // Debug console at the bottom of the screen (only on mobile)
+          // Positioned above the bottomNavigationBar on Android
+          Positioned(
+            left: 0,
+            right: 0,
+            bottom: bottomPadding,
+            child: const DebugConsole(),
+          ),
+        ],
       ),
       bottomNavigationBar: _isAndroid ? _buildAndroidBottomNav() : null,
     );

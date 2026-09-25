@@ -167,7 +167,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
             ),
           ),
           // Debug console - handles its own positioning
-          const DebugConsole(),
+          const Positioned.fill(child: DebugConsole()),
         ],
       ),
       bottomNavigationBar: _isAndroid ? _buildAndroidBottomNav() : null,

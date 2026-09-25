@@ -15,6 +15,7 @@ class DebugConsole extends StatefulWidget {
 }
 
 class _DebugConsoleState extends State<DebugConsole> {
+  static const String _appVersion = '1.0.1+1';
   static const int _maxMessages = 100;
   static const double _consoleHeight = 100.0;
   static const double _toggleButtonSize = 48.0;
@@ -32,6 +33,8 @@ class _DebugConsoleState extends State<DebugConsole> {
   void initState() {
     super.initState();
     _setupDebugPrintOverride();
+    // Add startup message to verify debug console is active
+    _captureDebugPrint('=== Debug Console initialized - App version: $_appVersion ===');
   }
 
   @override
@@ -93,6 +96,10 @@ class _DebugConsoleState extends State<DebugConsole> {
   void _toggleVisibility() {
     setState(() {
       _isVisible = !_isVisible;
+      // Add a message when console is shown
+      if (_isVisible) {
+        _captureDebugPrint('Debug Console shown - App version: $_appVersion');
+      }
     });
   }
 

@@ -23,11 +23,13 @@ class NowPlayingState {
 class PlaybackController {
   PlaybackController._() {
     _player.onPlayerStateChanged.listen((state) {
+      debugPrint('[PlaybackController] onPlayerStateChanged: $state');
       if (state == PlayerState.stopped) {
         _setNowPlaying(null);
       }
     });
     _player.onPlayerComplete.listen((_) {
+      debugPrint('[PlaybackController] onPlayerComplete: track finished');
       _setNowPlaying(null);
       // When a track completes, automatically play the next one if we have a queue
       unawaited(_handleTrackComplete());
@@ -120,8 +122,10 @@ class PlaybackController {
 
   // Set up a queue for playback
   void setQueue(List<MusicTrack> queue, {int startIndex = 0}) {
+    debugPrint('[PlaybackController] setQueue: queue.length=${queue.length}, startIndex=$startIndex');
     _queue = List.from(queue);
     _currentQueueIndex = startIndex >= 0 && startIndex < _queue.length ? startIndex : -1;
+    debugPrint('[PlaybackController] setQueue: _currentQueueIndex set to $_currentQueueIndex');
     _queueController.add(List.unmodifiable(_queue));
     _queueIndexController.add(_currentQueueIndex);
   }
@@ -138,14 +142,20 @@ class PlaybackController {
 
   // Start playing the queue
   Future<void> playQueue({int startIndex = 0}) async {
-    if (_queue.isEmpty) return;
+    debugPrint('[PlaybackController] playQueue: _queue.length=${_queue.length}, startIndex=$startIndex');
+    if (_queue.isEmpty) {
+      debugPrint('[PlaybackController] playQueue: queue is empty, returning');
+      return;
+    }
     
     if (startIndex < 0 || startIndex >= _queue.length) {
+      debugPrint('[PlaybackController] playQueue: adjusting startIndex to 0');
       startIndex = 0;
     }
     
     _currentQueueIndex = startIndex;
     _isQueuePlaying = true;
+    debugPrint('[PlaybackController] playQueue: _currentQueueIndex=$_currentQueueIndex, _isQueuePlaying=$_isQueuePlaying');
     _queueIndexController.add(_currentQueueIndex);
     _queuePlayingController.add(_isQueuePlaying);
     
@@ -154,26 +164,33 @@ class PlaybackController {
 
   // Play the track at the current queue index
   Future<void> _playCurrentQueueTrack() async {
+    debugPrint('[PlaybackController] _playCurrentQueueTrack: _currentQueueIndex=$_currentQueueIndex, _queue.length=${_queue.length}');
     if (_currentQueueIndex < 0 || _currentQueueIndex >= _queue.length) {
+      debugPrint('[PlaybackController] _playCurrentQueueTrack: index out of bounds');
       return;
     }
     
     final track = _queue[_currentQueueIndex];
+    debugPrint('[PlaybackController] _playCurrentQueueTrack: track=${track.id}, title=${track.title}');
     
     String streamUrl;
     if (_getStreamUrlSync != null) {
       streamUrl = _getStreamUrlSync!(track.id);
+      debugPrint('[PlaybackController] _playCurrentQueueTrack: got streamUrl from sync provider: $streamUrl');
     } else if (_getStreamUrlAsync != null) {
       streamUrl = await _getStreamUrlAsync!(track.id);
+      debugPrint('[PlaybackController] _playCurrentQueueTrack: got streamUrl from async provider: $streamUrl');
     } else {
-      debugPrint('No stream URL provider set for queue playback');
+      debugPrint('[PlaybackController] _playCurrentQueueTrack: No stream URL provider set for queue playback');
       return;
     }
     
     try {
+      debugPrint('[PlaybackController] _playCurrentQueueTrack: calling playTrackWithFallback');
       await playTrackWithFallback(track: track, streamUrl: streamUrl);
+      debugPrint('[PlaybackController] _playCurrentQueueTrack: playTrackWithFallback completed');
     } catch (e) {
-      debugPrint('Failed to play queue track (with fallback): $e');
+      debugPrint('[PlaybackController] _playCurrentQueueTrack: Failed to play queue track (with fallback): $e');
       // Try to play next track if available
       if (_isQueuePlaying && _currentQueueIndex + 1 < _queue.length) {
         _currentQueueIndex++;
@@ -185,13 +202,19 @@ class PlaybackController {
 
   // Handle track completion - play next track automatically
   Future<void> _handleTrackComplete() async {
-    if (!_isQueuePlaying) return;
+    debugPrint('[PlaybackController] _handleTrackComplete: _isQueuePlaying=$_isQueuePlaying, _currentQueueIndex=$_currentQueueIndex, _queue.length=${_queue.length}');
+    if (!_isQueuePlaying) {
+      debugPrint('[PlaybackController] _handleTrackComplete: NOT playing queue, returning');
+      return;
+    }
     
     // Move to next track
     _currentQueueIndex++;
+    debugPrint('[PlaybackController] _handleTrackComplete: incremented index to $_currentQueueIndex');
     
     if (_currentQueueIndex >= _queue.length) {
       // Queue ended
+      debugPrint('[PlaybackController] _handleTrackComplete: queue ended');
       _isQueuePlaying = false;
       _currentQueueIndex = -1;
       _queueIndexController.add(_currentQueueIndex);
@@ -200,26 +223,32 @@ class PlaybackController {
     }
     
     _queueIndexController.add(_currentQueueIndex);
+    debugPrint('[PlaybackController] _handleTrackComplete: calling _playCurrentQueueTrack for index $_currentQueueIndex');
     await _playCurrentQueueTrack();
   }
 
   // Manually play next track
   Future<void> playNext() async {
+    debugPrint('[PlaybackController] playNext: _isQueuePlaying=$_isQueuePlaying, _queue.length=${_queue.length}, _currentQueueIndex=$_currentQueueIndex');
     if (!_isQueuePlaying && _queue.isNotEmpty) {
+      debugPrint('[PlaybackController] playNext: not currently playing, starting from current position');
       // If not currently playing, start from beginning or current position
       if (_currentQueueIndex < 0) {
         _currentQueueIndex = 0;
+        debugPrint('[PlaybackController] playNext: _currentQueueIndex was < 0, set to 0');
       }
       _isQueuePlaying = true;
       _queuePlayingController.add(_isQueuePlaying);
     }
     
     if (_isQueuePlaying && _currentQueueIndex + 1 < _queue.length) {
+      debugPrint('[PlaybackController] playNext: incrementing _currentQueueIndex');
       _currentQueueIndex++;
       _queueIndexController.add(_currentQueueIndex);
       await _playCurrentQueueTrack();
     } else if (_isQueuePlaying) {
       // Reached end of queue
+      debugPrint('[PlaybackController] playNext: reached end of queue');
       _isQueuePlaying = false;
       _queuePlayingController.add(_isQueuePlaying);
     }

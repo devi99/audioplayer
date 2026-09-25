@@ -26,6 +26,9 @@ class LocalFileQueueManager {
   final StreamController<LocalFileQueueItem?> _currentItemController =
       StreamController.broadcast();
 
+  // Track PlaybackController's queue index to keep _currentItem in sync
+  StreamSubscription<int>? _playbackQueueIndexSubscription;
+
   /// Stream that emits when the queue changes
   Stream<List<LocalFileQueueItem>> get onQueueChanged => _queueController.stream;
 
@@ -41,7 +44,16 @@ class LocalFileQueueManager {
 
   /// Set the API instance to use for queue operations
   void setApi(MusicLibraryApi api) {
+    debugPrint('[QueueManager] setApi: setting API and subscribing to PlaybackController queue index');
     _api = api;
+    
+    // Subscribe to PlaybackController's queue index changes
+    // This ensures we update _currentItem when auto-advance happens
+    _playbackQueueIndexSubscription?.cancel();
+    _playbackQueueIndexSubscription = _playbackController.onQueueIndexChanged.listen((index) {
+      debugPrint('[QueueManager] PlaybackController queue index changed to $index');
+      _updateCurrentItemFromPlaybackIndex(index);
+    });
   }
 
   /// Load the queue from the API
@@ -127,10 +139,15 @@ class LocalFileQueueManager {
 
   /// Add a song to the queue and start playing if the queue was empty
   Future<void> addAndPlayIfEmpty(MusicTrack song) async {
-    if (_api == null) return;
+    debugPrint('[QueueManager] addAndPlayIfEmpty: START, song.title=${song.title}, song.id=${song.id}, _api != null: ${_api != null}');
+    if (_api == null) {
+      debugPrint('[QueueManager] addAndPlayIfEmpty: _api is null, returning');
+      return;
+    }
 
     debugPrint('[QueueManager] addAndPlayIfEmpty: previousLength=${_queue.length}');
     final previousLength = _queue.length;
+    debugPrint('[QueueManager] addAndPlayIfEmpty: calling addToQueue for song.filePath=${song.filePath}');
     final item = await addToQueue(
       fullFilePath: song.filePath!,
       album: song.album,
@@ -139,10 +156,19 @@ class LocalFileQueueManager {
     );
     debugPrint('[QueueManager] addAndPlayIfEmpty: added item ${item?.id}');
 
-    if (item == null) return;
+    if (item == null) {
+      debugPrint('[QueueManager] addAndPlayIfEmpty: item is null, returning');
+      return;
+    }
 
     // Reload queue to get the new item
+    debugPrint('[QueueManager] addAndPlayIfEmpty: calling loadQueue');
     await loadQueue();
+    debugPrint('[QueueManager] addAndPlayIfEmpty: loadQueue complete, _queue.length=${_queue.length}');
+
+    // Always sync to PlaybackController so it knows about all queued items
+    debugPrint('[QueueManager] addAndPlayIfEmpty: calling _syncQueueToPlaybackController');
+    await _syncQueueToPlaybackController();
 
     // If queue was empty before adding, start playing
     if (previousLength == 0) {
@@ -156,13 +182,15 @@ class LocalFileQueueManager {
       _currentItemController.add(_currentItem);
       
       // Set current item in API
+      debugPrint('[QueueManager] addAndPlayIfEmpty: calling _setCurrentItemInApi');
       await _setCurrentItemInApi(item.id);
 
-      // Play using the original song's ID (we have it available here)
-      await _playbackController.playTrack(
-        track: song,
-        streamUrl: _api!.streamSongUrl(song.id),
-      );
+      // Start playing
+      debugPrint('[QueueManager] addAndPlayIfEmpty: calling _playbackController.playQueue(startIndex: 0)');
+      await _playbackController.playQueue(startIndex: 0);
+      debugPrint('[QueueManager] addAndPlayIfEmpty: COMPLETE');
+    } else {
+      debugPrint('[QueueManager] addAndPlayIfEmpty: queue was not empty (previousLength=$previousLength), only synced to PlaybackController');
     }
   }
 
@@ -241,9 +269,12 @@ class LocalFileQueueManager {
 
   /// Play a specific queue item
   Future<void> playItem(LocalFileQueueItem item) async {
-    if (_api == null) return;
+    debugPrint('[QueueManager] playItem: START, item.id=${item.id}, filePath=${item.fullFilePath}, _api != null: ${_api != null}');
+    if (_api == null) {
+      debugPrint('[QueueManager] playItem: _api is null, returning');
+      return;
+    }
 
-    debugPrint('[QueueManager] playItem: item=${item.id}, filePath=${item.fullFilePath}');
     try {
       // Update current item immediately for UI responsiveness
       _currentItem = item;
@@ -251,25 +282,35 @@ class LocalFileQueueManager {
       _currentItemController.add(_currentItem);
 
       // Set current item in API (without reloading queue)
+      debugPrint('[QueueManager] playItem: calling _setCurrentItemInApi');
       await _setCurrentItemInApi(item.id);
 
-      // Find the song by filePath and play it
-      debugPrint('[QueueManager] playItem: finding song by filePath...');
-      final stopwatch = Stopwatch()..start();
-      final song = await _findSongByFilePath(item.fullFilePath);
-      stopwatch.stop();
-      debugPrint('[QueueManager] playItem: song lookup took ${stopwatch.elapsedMilliseconds}ms');
+      // Sync the queue to PlaybackController
+      debugPrint('[QueueManager] playItem: calling _syncQueueToPlaybackController');
+      await _syncQueueToPlaybackController();
       
-      if (song != null) {
-        debugPrint('[QueueManager] playItem: found song ${song.id}, playing');
-        await _playbackController.playTrack(
-          track: song,
-          streamUrl: _api!.streamSongUrl(song.id),
-        );
+      // Find the index of this item in the queue and play it
+      final index = getIndexOfItem(item.id);
+      debugPrint('[QueueManager] playItem: index=$index');
+      if (index >= 0) {
+        debugPrint('[QueueManager] playItem: skipping to index $index');
+        await _playbackController.skipToIndex(index);
       } else {
-        debugPrint('[QueueManager] playItem: Could not find song for filePath: ${item.fullFilePath}');
-        throw Exception('Could not find song for filePath: ${item.fullFilePath}');
+        // Item not found in queue, fall back to direct play
+        debugPrint('[QueueManager] playItem: item not in queue, playing directly');
+        final song = await _findSongByFilePath(item.fullFilePath);
+        if (song != null) {
+          debugPrint('[QueueManager] playItem: found song ${song.id}, calling playTrack');
+          await _playbackController.playTrack(
+            track: song,
+            streamUrl: _api!.streamSongUrl(song.id),
+          );
+        } else {
+          debugPrint('[QueueManager] playItem: Could not find song for filePath: ${item.fullFilePath}');
+          throw Exception('Could not find song for filePath: ${item.fullFilePath}');
+        }
       }
+      debugPrint('[QueueManager] playItem: COMPLETE');
     } catch (error) {
       debugPrint('[QueueManager] playItem: Failed to play queue item: $error');
       rethrow;
@@ -278,18 +319,32 @@ class LocalFileQueueManager {
 
   /// Play the next item in the queue
   Future<void> playNext() async {
-    if (_api == null) return;
+    debugPrint('[QueueManager] playNext: START, _api != null: ${_api != null}');
+    if (_api == null) {
+      debugPrint('[QueueManager] playNext: _api is null, returning');
+      return;
+    }
 
     try {
-      final nextItem = await _api!.getNextLocalFileQueueTrack();
+      // Sync queue to PlaybackController and let it handle next
+      // This ensures auto-advance and manual next both work correctly
+      debugPrint('[QueueManager] playNext: calling _syncQueueToPlaybackController');
+      await _syncQueueToPlaybackController();
+      debugPrint('[QueueManager] playNext: calling _playbackController.playNext');
+      await _playbackController.playNext();
+      
+      // Update our current item to match
+      final nextItem = getNextItem();
+      debugPrint('[QueueManager] playNext: nextItem=${nextItem?.id}');
       if (nextItem != null) {
-        await playItem(nextItem);
-      } else {
-        // Queue is empty
-        await _playbackController.stop();
+        _currentItem = nextItem;
+        debugPrint('[QueueManager] playNext: _currentItem set to ${nextItem.id}');
+        _currentItemController.add(_currentItem);
+        await _setCurrentItemInApi(nextItem.id);
       }
+      debugPrint('[QueueManager] playNext: COMPLETE');
     } catch (error) {
-      debugPrint('Failed to play next queue item: $error');
+      debugPrint('[QueueManager] playNext: Failed to play next queue item: $error');
     }
   }
 
@@ -319,8 +374,119 @@ class LocalFileQueueManager {
     return null;
   }
 
+  /// Sync the API queue to PlaybackController's internal queue
+  /// This ensures auto-advance works correctly by fetching the actual MusicTrack
+  /// objects from the API based on file paths
+  Future<void> _syncQueueToPlaybackController() async {
+    debugPrint('[QueueManager] _syncQueueToPlaybackController: START, _api != null: ${_api != null}, _queue.length=${_queue.length}');
+    if (_api == null) {
+      debugPrint('[QueueManager] _syncQueueToPlaybackController: _api is null, returning');
+      return;
+    }
+
+    debugPrint('[QueueManager] _syncQueueToPlaybackController: syncing ${_queue.length} items');
+    
+    // Find the current item index in our queue
+    int startIndex = 0;
+    if (_currentItem != null) {
+      startIndex = getIndexOfItem(_currentItem!.id);
+      debugPrint('[QueueManager] _syncQueueToPlaybackController: current item index=$startIndex');
+    }
+    
+    // Fetch actual MusicTrack objects for each queue item
+    // We need to do this because PlaybackController works with MusicTrack
+    final musicTracks = <MusicTrack>[];
+    for (final item in _queue) {
+      debugPrint('[QueueManager] _syncQueueToPlaybackController: processing item ${item.id}, filePath=${item.fullFilePath}');
+      try {
+        final song = await _findSongByFilePath(item.fullFilePath);
+        if (song != null) {
+          debugPrint('[QueueManager] _syncQueueToPlaybackController: found song ${song.id} for item ${item.id}');
+          musicTracks.add(song);
+        } else {
+          debugPrint('[QueueManager] _syncQueueToPlaybackController: could not find song for filePath ${item.fullFilePath}');
+          // Create a placeholder track - this shouldn't happen in normal operation
+          musicTracks.add(MusicTrack(
+            id: 'unknown_${item.id}',
+            title: item.title ?? 'Unknown',
+            artist: item.artist ?? 'Unknown',
+            album: item.album ?? '',
+            durationSeconds: 0,
+            rankOrder: 0,
+            tags: const [],
+            filePath: item.fullFilePath,
+          ));
+        }
+      } catch (e) {
+        debugPrint('[QueueManager] _syncQueueToPlaybackController: error fetching song: $e');
+        // Create a placeholder track
+        musicTracks.add(MusicTrack(
+          id: 'error_${item.id}',
+          title: item.title ?? 'Unknown',
+          artist: item.artist ?? 'Unknown',
+          album: item.album ?? '',
+          durationSeconds: 0,
+          rankOrder: 0,
+          tags: const [],
+          filePath: item.fullFilePath,
+        ));
+      }
+    }
+    
+    debugPrint('[QueueManager] _syncQueueToPlaybackController: fetched ${musicTracks.length} tracks, setting queue in PlaybackController with startIndex=$startIndex');
+    
+    // Set the queue in PlaybackController
+    _playbackController.setQueue(musicTracks, startIndex: startIndex);
+    
+    // Ensure the stream URL provider is set
+    // This should already be set by the UI, but set it here as a fallback
+    if (_api != null) {
+      debugPrint('[QueueManager] _syncQueueToPlaybackController: setting stream URL provider');
+      _playbackController.setStreamUrlProviderSync((trackId) => _api!.streamSongUrl(trackId));
+    }
+    debugPrint('[QueueManager] _syncQueueToPlaybackController: COMPLETE');
+  }
+
+  /// Update _currentItem based on PlaybackController's queue index
+  /// This keeps our current item in sync when PlaybackController auto-advances
+  void _updateCurrentItemFromPlaybackIndex(int playbackIndex) {
+    debugPrint('[QueueManager] _updateCurrentItemFromPlaybackIndex: playbackIndex=$playbackIndex, _queue.length=${_queue.length}');
+    
+    // If our queue is empty or index is invalid, clear current item
+    if (_queue.isEmpty || playbackIndex < 0 || playbackIndex >= _queue.length) {
+      if (playbackIndex < 0) {
+        debugPrint('[QueueManager] _updateCurrentItemFromPlaybackIndex: playbackIndex < 0 or queue empty, clearing current item');
+      } else {
+        debugPrint('[QueueManager] _updateCurrentItemFromPlaybackIndex: playbackIndex=$playbackIndex >= _queue.length=${_queue.length}, clearing current item');
+      }
+      final oldCurrentId = _currentItem?.id;
+      _currentItem = null;
+      if (oldCurrentId != null) {
+        _currentItemController.add(_currentItem);
+      }
+      return;
+    }
+    
+    // Find the corresponding queue item
+    final newCurrentItem = _queue[playbackIndex];
+    final oldCurrentId = _currentItem?.id;
+    
+    // Only update if the current item is actually changing
+    if (oldCurrentId != newCurrentItem.id) {
+      debugPrint('[QueueManager] _updateCurrentItemFromPlaybackIndex: changing _currentItem from $oldCurrentId to ${newCurrentItem.id}');
+      _currentItem = newCurrentItem;
+      _currentItemController.add(_currentItem);
+      
+      // Update in API
+      unawaited(_setCurrentItemInApi(newCurrentItem.id));
+    } else {
+      debugPrint('[QueueManager] _updateCurrentItemFromPlaybackIndex: current item unchanged ($oldCurrentId)');
+    }
+  }
+
   /// Dispose of stream controllers
   void dispose() {
+    _playbackQueueIndexSubscription?.cancel();
     _queueController.close();
     _currentItemController.close();
   }

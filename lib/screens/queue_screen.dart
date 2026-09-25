@@ -20,6 +20,7 @@ class _QueueScreenState extends State<QueueScreen> {
   @override
   void initState() {
     super.initState();
+    debugPrint('[QueueScreen] initState: setting API and loading queue');
     _queueManager.setApi(widget.api);
     _queueManager.loadQueue();
   }

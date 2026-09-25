@@ -5,9 +5,9 @@ import 'package:flutter/material.dart';
 import '../models/library_entities.dart';
 import '../models/music_track.dart';
 import '../services/music_library_api.dart';
-import '../services/playback_controller.dart';
 import 'album_songs_page.dart';
 import 'shared_library_widgets.dart';
+import 'song_management_mixin.dart';
 
 class ArtistAlbumsSongsPage extends StatefulWidget {
   const ArtistAlbumsSongsPage(
@@ -262,7 +262,7 @@ class _SingleTrackCard extends StatefulWidget {
   State<_SingleTrackCard> createState() => _SingleTrackCardState();
 }
 
-class _SingleTrackCardState extends State<_SingleTrackCard> {
+class _SingleTrackCardState extends State<_SingleTrackCard> with SongManagementMixin {
   bool isLoadingTags = false;
   bool isUpdatingTag = false;
   bool isUpdatingTier = false;
@@ -271,11 +271,15 @@ class _SingleTrackCardState extends State<_SingleTrackCard> {
   int? currentTier;
 
   @override
+  MusicLibraryApi get api => widget.api;
+
+  @override
   void initState() {
     super.initState();
     currentRankOrder = widget.singleTrack.rankOrder;
     currentTier = _getTierFromRankOrder(currentRankOrder);
     _loadTags();
+    initFloatingYouTubePlayer();
   }
 
   Future<void> _loadTags() async {
@@ -446,41 +450,7 @@ class _SingleTrackCardState extends State<_SingleTrackCard> {
       filePath: widget.singleTrack.localFilePath,
     );
     
-    final hasFilePath = (widget.singleTrack.localFilePath ?? '').trim().isNotEmpty;
-    
-    if (hasFilePath) {
-      // Has local file, play normally
-      try {
-        final streamUrl = widget.api.streamSingleTrackUrl(widget.singleTrack.id);
-        await PlaybackController.instance.playTrack(
-          track: musicTrack,
-          streamUrl: streamUrl,
-        );
-      } catch (error) {
-        if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Unable to play "${widget.singleTrack.title}". The stream is unavailable.'),
-          ),
-        );
-      }
-    } else {
-      // No local file, use YouTube fallback
-      try {
-        final streamUrl = widget.api.streamSingleTrackUrl(widget.singleTrack.id);
-        await PlaybackController.instance.playTrackWithFallback(
-          track: musicTrack,
-          streamUrl: streamUrl,
-        );
-      } catch (error) {
-        if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Unable to play "${widget.singleTrack.title}" from YouTube: $error'),
-          ),
-        );
-      }
-    }
+    await playSongWithYouTubeFallback(musicTrack);
   }
 
   @override
@@ -489,14 +459,15 @@ class _SingleTrackCardState extends State<_SingleTrackCard> {
     final hasFilePath = (widget.singleTrack.localFilePath ?? '').trim().isNotEmpty;
     final selectedTierLabel = currentTier == null ? 'Select rank' : 'Tier $currentTier';
 
-    return Container(
-      padding: const EdgeInsets.symmetric(
-        vertical: 12,
-        horizontal: 12,
-      ),
-      decoration: BoxDecoration(
-        color: theme.colorScheme.surface.withValues(alpha: 0.82),
-        borderRadius: BorderRadius.circular(16),
+    return wrapWithYouTubeLoading(
+      Container(
+        padding: const EdgeInsets.symmetric(
+          vertical: 12,
+          horizontal: 12,
+        ),
+        decoration: BoxDecoration(
+          color: theme.colorScheme.surface.withValues(alpha: 0.82),
+          borderRadius: BorderRadius.circular(16),
       ),
       child: Row(
         children: <Widget>[
@@ -614,7 +585,8 @@ class _SingleTrackCardState extends State<_SingleTrackCard> {
           ),
         ],
       ),
-    );
+    ),
+  );
   }
 
   int? _getTierFromRankOrder(double? rankOrder) {

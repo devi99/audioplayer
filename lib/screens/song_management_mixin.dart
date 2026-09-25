@@ -314,15 +314,19 @@ mixin SongManagementMixin<T extends StatefulWidget> on State<T> {
   /// If the song has a local file, adds it to the queue and plays if queue was empty.
   /// If not, searches YouTube and plays from there directly (skipping stream attempt).
   Future<void> playSongWithYouTubeFallback(MusicTrack song) async {
+    debugPrint('[SongManagementMixin] playSongWithYouTubeFallback: song.title=${song.title}, hasPlayableSource=${(song.filePath ?? '').trim().isNotEmpty}');
     final hasPlayableSource = (song.filePath ?? '').trim().isNotEmpty;
     
     if (hasPlayableSource) {
       // Song has a local file, add to queue and play if queue was empty
+      debugPrint('[SongManagementMixin] playSongWithYouTubeFallback: calling _queueManager.addAndPlayIfEmpty');
       await _queueManager.addAndPlayIfEmpty(song);
+      debugPrint('[SongManagementMixin] playSongWithYouTubeFallback: addAndPlayIfEmpty complete');
       return;
     }
     
     // Song has no local file, go directly to YouTube fallback
+    debugPrint('[SongManagementMixin] playSongWithYouTubeFallback: no playable source, using YouTube fallback');
     try {
       await PlaybackController.instance.youtubeFallback.searchAndPlay(
         song.artist,

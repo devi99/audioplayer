@@ -382,10 +382,9 @@ class PlaybackController {
       debugPrint('[PlaybackController] playTrack: cached file exists=$exists, length=$length');
       
       if (exists && length > 0) {
-        // Play from cache - explicitly set source then resume
+        // Play from cache using play() which handles source transition
         debugPrint('[PlaybackController] playTrack: Playing from cache: $cachedPath');
-        await _player.setSource(DeviceFileSource(cachedPath));
-        await _player.resume();
+        await _player.play(DeviceFileSource(cachedPath));
         // Set now playing state immediately after playback starts
         _setNowPlaying(track);
         // Show notification (don't await, as it may fail on non-Android platforms)
@@ -411,8 +410,7 @@ class PlaybackController {
       final downloadedFile = File(downloadedPath);
       if (await downloadedFile.exists() && await downloadedFile.length() > 0) {
         debugPrint('[PlaybackController] playTrack: Download complete, playing from: $downloadedPath');
-        await _player.setSource(DeviceFileSource(downloadedPath));
-        await _player.resume();
+        await _player.play(DeviceFileSource(downloadedPath));
         // Set now playing state immediately after playback starts
         _setNowPlaying(track);
         // Show notification (don't await, as it may fail on non-Android platforms)
@@ -428,8 +426,7 @@ class PlaybackController {
     
     // For Android and iOS: start streaming and download in background
     debugPrint('[PlaybackController] playTrack: Streaming from URL: $streamUrl');
-    await _player.setSource(UrlSource(streamUrl));
-    await _player.resume();
+    await _player.play(UrlSource(streamUrl));
     // Set now playing state immediately after playback starts
     _setNowPlaying(track);
     // Show notification (may fail on some platforms, but don't let it block)

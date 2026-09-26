@@ -79,7 +79,6 @@ class PlaybackController {
   final YouTubeFallback _youtubeFallback = YouTubeFallback();
   final Set<String> _downloadingSongs = {};
   bool _isPlayingTrack = false;
-  bool _isTransitioningTrack = false;
 
   // Expose YouTube fallback for UI integration
   YouTubeFallback get youtubeFallback => _youtubeFallback;
@@ -363,19 +362,20 @@ class PlaybackController {
   }) async {
     debugPrint('[PlaybackController] playTrack: START, track.id=${track.id}, track.title=${track.title}');
     
-    // Always stop to ensure clean state - this prevents source conflicts
-    debugPrint('[PlaybackController] playTrack: Stopping current playback');
     try {
-      await _player.stop();
-      debugPrint('[PlaybackController] playTrack: Player stopped successfully');
-    } catch (e) {
-      debugPrint('[PlaybackController] playTrack: stop() error (may already be stopped): $e');
-    }
-    
-    // Delay to allow audioplayer to fully release the old source
-    // This prevents GStreamer errors on Linux when rapidly changing sources
-    await Future.delayed(const Duration(milliseconds: 200));
-    debugPrint('[PlaybackController] playTrack: Player state cleaned, proceeding with track ${track.id}');
+      // Stop current playback to prepare for new track
+      debugPrint('[PlaybackController] playTrack: Stopping current playback');
+      try {
+        await _player.stop();
+        debugPrint('[PlaybackController] playTrack: Player stopped');
+      } catch (e) {
+        debugPrint('[PlaybackController] playTrack: stop() error: $e');
+      }
+      
+      // Wait for any pending operations to complete
+      debugPrint('[PlaybackController] playTrack: Waiting for pending operations to complete (300ms)');
+      await Future.delayed(const Duration(milliseconds: 300));
+      debugPrint('[PlaybackController] playTrack: Ready to set new source for track ${track.id}');
     
     // Check if song is cached
     final cachedPath = await _cache.getCachedFilePath(track.id);
@@ -389,10 +389,9 @@ class PlaybackController {
       debugPrint('[PlaybackController] playTrack: cached file exists=$exists, length=$length');
       
       if (exists && length > 0) {
-        // Play from cache - explicitly set source then resume
+        // Play from cache
         debugPrint('[PlaybackController] playTrack: Playing from cache: $cachedPath');
-        await _player.setSource(DeviceFileSource(cachedPath));
-        await _player.resume();
+        await _player.play(DeviceFileSource(cachedPath));
         // Set now playing state immediately after playback starts
         _setNowPlaying(track);
         // Show notification (don't await, as it may fail on non-Android platforms)

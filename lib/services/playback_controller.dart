@@ -362,19 +362,13 @@ class PlaybackController {
   }) async {
     debugPrint('[PlaybackController] playTrack: START, track.id=${track.id}, track.title=${track.title}');
     
-    // Stop current playback to ensure clean state before setting new source
-    debugPrint('[PlaybackController] playTrack: Stopping current playback');
-    try {
-      await _player.stop();
-      debugPrint('[PlaybackController] playTrack: Player stopped');
-    } catch (e) {
-      debugPrint('[PlaybackController] playTrack: stop() error: $e');
-    }
+    // Check if we need to stop current playback (only if currently playing a different track)
+    // Note: We don't call stop() here to avoid GStreamer errors - setting a new source will implicitly stop
+    debugPrint('[PlaybackController] playTrack: Skipping explicit stop() to avoid GStreamer errors');
     
-    // Critical delay to allow GStreamer to fully release the old source on Linux
-    debugPrint('[PlaybackController] playTrack: Waiting 500ms for GStreamer cleanup');
-    await Future.delayed(const Duration(milliseconds: 500));
-    debugPrint('[PlaybackController] playTrack: GStreamer cleanup complete');
+    // Small delay to allow any pending operations to settle
+    await Future.delayed(const Duration(milliseconds: 100));
+    debugPrint('[PlaybackController] playTrack: Ready to proceed with track ${track.id}');
     
     // Check if song is cached
     final cachedPath = await _cache.getCachedFilePath(track.id);

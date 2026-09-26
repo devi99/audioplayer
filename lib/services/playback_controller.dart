@@ -196,6 +196,7 @@ class PlaybackController {
     
     try {
       _isPlayingTrack = true;
+      debugPrint('[PlaybackController] _playCurrentQueueTrack: _isPlayingTrack set to true');
       debugPrint('[PlaybackController] _playCurrentQueueTrack: calling playTrackWithFallback');
       await playTrackWithFallback(track: track, streamUrl: streamUrl);
       debugPrint('[PlaybackController] _playCurrentQueueTrack: playTrackWithFallback completed');
@@ -209,12 +210,13 @@ class PlaybackController {
       }
     } finally {
       _isPlayingTrack = false;
+      debugPrint('[PlaybackController] _playCurrentQueueTrack: _isPlayingTrack set to false');
     }
   }
 
   // Handle track completion - play next track automatically
   Future<void> _handleTrackComplete() async {
-    debugPrint('[PlaybackController] _handleTrackComplete: _isQueuePlaying=$_isQueuePlaying, _currentQueueIndex=$_currentQueueIndex, _queue.length=${_queue.length}');
+    debugPrint('[PlaybackController] _handleTrackComplete: START - _isQueuePlaying=$_isQueuePlaying, _currentQueueIndex=$_currentQueueIndex, _queue.length=${_queue.length}');
     if (!_isQueuePlaying) {
       debugPrint('[PlaybackController] _handleTrackComplete: NOT playing queue, returning');
       return;
@@ -222,7 +224,7 @@ class PlaybackController {
     
     // Move to next track
     _currentQueueIndex++;
-    debugPrint('[PlaybackController] _handleTrackComplete: incremented index to $_currentQueueIndex');
+    debugPrint('[PlaybackController] _handleTrackComplete: incremented index from ${_currentQueueIndex - 1} to $_currentQueueIndex');
     
     if (_currentQueueIndex >= _queue.length) {
       // Queue ended
@@ -237,6 +239,7 @@ class PlaybackController {
     _queueIndexController.add(_currentQueueIndex);
     debugPrint('[PlaybackController] _handleTrackComplete: calling _playCurrentQueueTrack for index $_currentQueueIndex');
     await _playCurrentQueueTrack();
+    debugPrint('[PlaybackController] _handleTrackComplete: COMPLETE');
   }
 
   // Manually play next track

@@ -342,14 +342,23 @@ class PlaybackController {
     final cachedPath = await _cache.getCachedFilePath(track.id);
     
     if (cachedPath != null) {
-      // Play from cache
-      await _player.stop();
-      await _player.play(DeviceFileSource(cachedPath));
-      // Set now playing state immediately after playback starts
-      _setNowPlaying(track);
-      // Show notification (don't await, as it may fail on non-Android platforms)
-      unawaited(_showNotification(track));
-      return;
+      // Verify cached file is valid (non-empty) before attempting to play
+      final cachedFile = File(cachedPath);
+      if (await cachedFile.exists() && await cachedFile.length() > 0) {
+        // Play from cache
+        await _player.stop();
+        await _player.play(DeviceFileSource(cachedPath));
+        // Set now playing state immediately after playback starts
+        _setNowPlaying(track);
+        // Show notification (don't await, as it may fail on non-Android platforms)
+        unawaited(_showNotification(track));
+        return;
+      } else {
+        // Cached file is empty/invalid, treat as not cached
+        debugPrint('[PlaybackController] playTrack: Cached file for ${track.id} is empty or invalid, will re-download');
+        // Remove from cache
+        await _cache.removeFromCache(track.id);
+      }
     }
     
     // On Linux and other non-mobile platforms, UrlSource doesn't work reliably
@@ -361,12 +370,19 @@ class PlaybackController {
       await _player.stop();
       // Download and cache synchronously before playing
       final downloadedPath = await _cache.downloadAndCache(track.id, streamUrl);
-      await _player.play(DeviceFileSource(downloadedPath));
-      // Set now playing state immediately after playback starts
-      _setNowPlaying(track);
-      // Show notification (don't await, as it may fail on non-Android platforms)
-      unawaited(_showNotification(track));
-      return;
+      final downloadedFile = File(downloadedPath);
+      if (await downloadedFile.exists() && await downloadedFile.length() > 0) {
+        await _player.play(DeviceFileSource(downloadedPath));
+        // Set now playing state immediately after playback starts
+        _setNowPlaying(track);
+        // Show notification (don't await, as it may fail on non-Android platforms)
+        unawaited(_showNotification(track));
+        return;
+      } else {
+        // Download failed, clean up and fall through to error
+        await _cache.removeFromCache(track.id);
+        throw Exception('Downloaded file for ${track.id} is empty or invalid');
+      }
     }
     
     // For Android and iOS: start streaming and download in background

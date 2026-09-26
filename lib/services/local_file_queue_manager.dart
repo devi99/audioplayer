@@ -326,22 +326,13 @@ class LocalFileQueueManager {
     }
 
     try {
-      // Sync queue to PlaybackController and let it handle next
-      // This ensures auto-advance and manual next both work correctly
-      debugPrint('[QueueManager] playNext: calling _syncQueueToPlaybackController');
-      await _syncQueueToPlaybackController();
+      // Don't resync the entire queue here - it's already synced and can cause race conditions
+      // Just delegate to PlaybackController
       debugPrint('[QueueManager] playNext: calling _playbackController.playNext');
       await _playbackController.playNext();
       
-      // Update our current item to match
-      final nextItem = getNextItem();
-      debugPrint('[QueueManager] playNext: nextItem=${nextItem?.id}');
-      if (nextItem != null) {
-        _currentItem = nextItem;
-        debugPrint('[QueueManager] playNext: _currentItem set to ${nextItem.id}');
-        _currentItemController.add(_currentItem);
-        await _setCurrentItemInApi(nextItem.id);
-      }
+      // The _updateCurrentItemFromPlaybackIndex subscription will handle updating _currentItem
+      // when PlaybackController emits the new index
       debugPrint('[QueueManager] playNext: COMPLETE');
     } catch (error) {
       debugPrint('[QueueManager] playNext: Failed to play next queue item: $error');

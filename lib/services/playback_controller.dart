@@ -362,20 +362,19 @@ class PlaybackController {
   }) async {
     debugPrint('[PlaybackController] playTrack: START, track.id=${track.id}, track.title=${track.title}');
     
+    // Stop current playback to ensure clean state before setting new source
+    debugPrint('[PlaybackController] playTrack: Stopping current playback');
     try {
-      // Stop current playback to prepare for new track
-      debugPrint('[PlaybackController] playTrack: Stopping current playback');
-      try {
-        await _player.stop();
-        debugPrint('[PlaybackController] playTrack: Player stopped');
-      } catch (e) {
-        debugPrint('[PlaybackController] playTrack: stop() error: $e');
-      }
-      
-      // Wait for any pending operations to complete
-      debugPrint('[PlaybackController] playTrack: Waiting for pending operations to complete (300ms)');
-      await Future.delayed(const Duration(milliseconds: 300));
-      debugPrint('[PlaybackController] playTrack: Ready to set new source for track ${track.id}');
+      await _player.stop();
+      debugPrint('[PlaybackController] playTrack: Player stopped');
+    } catch (e) {
+      debugPrint('[PlaybackController] playTrack: stop() error: $e');
+    }
+    
+    // Critical delay to allow GStreamer to fully release the old source on Linux
+    debugPrint('[PlaybackController] playTrack: Waiting 500ms for GStreamer cleanup');
+    await Future.delayed(const Duration(milliseconds: 500));
+    debugPrint('[PlaybackController] playTrack: GStreamer cleanup complete');
     
     // Check if song is cached
     final cachedPath = await _cache.getCachedFilePath(track.id);
@@ -389,9 +388,10 @@ class PlaybackController {
       debugPrint('[PlaybackController] playTrack: cached file exists=$exists, length=$length');
       
       if (exists && length > 0) {
-        // Play from cache
+        // Play from cache - explicitly set source then resume
         debugPrint('[PlaybackController] playTrack: Playing from cache: $cachedPath');
-        await _player.play(DeviceFileSource(cachedPath));
+        await _player.setSource(DeviceFileSource(cachedPath));
+        await _player.resume();
         // Set now playing state immediately after playback starts
         _setNowPlaying(track);
         // Show notification (don't await, as it may fail on non-Android platforms)

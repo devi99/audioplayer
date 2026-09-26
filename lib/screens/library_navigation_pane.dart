@@ -114,9 +114,9 @@ class LibraryNavigationPane extends StatelessWidget {
           _NavigationItem(
             collapsed: collapsed,
             selected: selectedSection == LibrarySection.play,
-            icon: Icons.play_circle_outline_rounded,
-            selectedIcon: Icons.play_circle_rounded,
-            label: 'Play',
+            icon: Icons.filter_list_outlined,
+            selectedIcon: Icons.filter_list_rounded,
+            label: 'Filter',
             onTap: () => onSelectSection(LibrarySection.play),
           ),
           _NavigationItem(

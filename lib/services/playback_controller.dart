@@ -78,6 +78,7 @@ class PlaybackController {
   final SongCache _cache = SongCache();
   final YouTubeFallback _youtubeFallback = YouTubeFallback();
   final Set<String> _downloadingSongs = {};
+  bool _isPlayingTrack = false;
 
   // Expose YouTube fallback for UI integration
   YouTubeFallback get youtubeFallback => _youtubeFallback;
@@ -165,6 +166,13 @@ class PlaybackController {
   // Play the track at the current queue index
   Future<void> _playCurrentQueueTrack() async {
     debugPrint('[PlaybackController] _playCurrentQueueTrack: _currentQueueIndex=$_currentQueueIndex, _queue.length=${_queue.length}');
+    
+    // Prevent concurrent playback attempts
+    if (_isPlayingTrack) {
+      debugPrint('[PlaybackController] _playCurrentQueueTrack: Already playing a track, skipping');
+      return;
+    }
+    
     if (_currentQueueIndex < 0 || _currentQueueIndex >= _queue.length) {
       debugPrint('[PlaybackController] _playCurrentQueueTrack: index out of bounds');
       return;
@@ -186,6 +194,7 @@ class PlaybackController {
     }
     
     try {
+      _isPlayingTrack = true;
       debugPrint('[PlaybackController] _playCurrentQueueTrack: calling playTrackWithFallback');
       await playTrackWithFallback(track: track, streamUrl: streamUrl);
       debugPrint('[PlaybackController] _playCurrentQueueTrack: playTrackWithFallback completed');
@@ -197,6 +206,8 @@ class PlaybackController {
         _queueIndexController.add(_currentQueueIndex);
         unawaited(_playCurrentQueueTrack());
       }
+    } finally {
+      _isPlayingTrack = false;
     }
   }
 
@@ -229,7 +240,7 @@ class PlaybackController {
 
   // Manually play next track
   Future<void> playNext() async {
-    debugPrint('[PlaybackController] playNext: _isQueuePlaying=$_isQueuePlaying, _queue.length=${_queue.length}, _currentQueueIndex=$_currentQueueIndex');
+    debugPrint('[PlaybackController] playNext: START - _isQueuePlaying=$_isQueuePlaying, _queue.length=${_queue.length}, _currentQueueIndex=$_currentQueueIndex');
     if (!_isQueuePlaying && _queue.isNotEmpty) {
       debugPrint('[PlaybackController] playNext: not currently playing, starting from current position');
       // If not currently playing, start from beginning or current position
@@ -242,16 +253,20 @@ class PlaybackController {
     }
     
     if (_isQueuePlaying && _currentQueueIndex + 1 < _queue.length) {
-      debugPrint('[PlaybackController] playNext: incrementing _currentQueueIndex');
+      debugPrint('[PlaybackController] playNext: incrementing _currentQueueIndex from $_currentQueueIndex to ${_currentQueueIndex + 1}');
       _currentQueueIndex++;
       _queueIndexController.add(_currentQueueIndex);
       await _playCurrentQueueTrack();
+      debugPrint('[PlaybackController] playNext: COMPLETE');
     } else if (_isQueuePlaying) {
       // Reached end of queue
       debugPrint('[PlaybackController] playNext: reached end of queue');
       _isQueuePlaying = false;
       _queuePlayingController.add(_isQueuePlaying);
+    } else {
+      debugPrint('[PlaybackController] playNext: Queue is empty or not playing');
     }
+    debugPrint('[PlaybackController] playNext: FINISHED');
   }
 
   // Manually play previous track
@@ -299,17 +314,20 @@ class PlaybackController {
     required MusicTrack track,
     required String streamUrl,
   }) async {
+    debugPrint('[PlaybackController] playTrackWithFallback: START for track ${track.id}');
     try {
       await playTrack(track: track, streamUrl: streamUrl);
+      debugPrint('[PlaybackController] playTrackWithFallback: SUCCESS for track ${track.id}');
     } catch (e) {
-      debugPrint('Failed to play track: $e');
+      debugPrint('[PlaybackController] playTrackWithFallback: FAILED for track ${track.id}, error: $e');
       
       // Try YouTube fallback when local file is unavailable
       if (!useYouTubeFallback) {
+        debugPrint('[PlaybackController] playTrackWithFallback: YouTube fallback disabled, rethrowing');
         rethrow;
       }
       
-      debugPrint('Attempting YouTube fallback for ${track.artist} - ${track.title}');
+      debugPrint('[PlaybackController] playTrackWithFallback: Attempting YouTube fallback for ${track.artist} - ${track.title}');
       
       try {
         // Search YouTube for a matching video and play it
@@ -319,17 +337,18 @@ class PlaybackController {
         );
         
         if (youtubeUrl != null) {
-          debugPrint('YouTube fallback: Successfully started playback for ${track.artist} - ${track.title}');
+          debugPrint('[PlaybackController] playTrackWithFallback: YouTube fallback SUCCESS for ${track.artist} - ${track.title}');
           // Consider the fallback successful - YouTube is now playing
           return; // Success
         } else {
-          debugPrint('YouTube fallback: No matching video found for ${track.artist} - ${track.title}');
+          debugPrint('[PlaybackController] playTrackWithFallback: YouTube fallback - No matching video found for ${track.artist} - ${track.title}');
         }
       } catch (e) {
-        debugPrint('YouTube fallback failed: $e');
+        debugPrint('[PlaybackController] playTrackWithFallback: YouTube fallback FAILED: $e');
       }
       
       // If YouTube fallback also fails, rethrow the original error
+      debugPrint('[PlaybackController] playTrackWithFallback: All fallback options exhausted, rethrowing');
       rethrow;
     }
   }
@@ -339,6 +358,9 @@ class PlaybackController {
     required String streamUrl,
   }) async {
     debugPrint('[PlaybackController] playTrack: START, track.id=${track.id}, track.title=${track.title}');
+    
+    // Stop any current playback and ensure clean state
+    await _player.stop();
     
     // Check if song is cached
     final cachedPath = await _cache.getCachedFilePath(track.id);
@@ -352,10 +374,10 @@ class PlaybackController {
       debugPrint('[PlaybackController] playTrack: cached file exists=$exists, length=$length');
       
       if (exists && length > 0) {
-        // Play from cache
+        // Play from cache - explicitly set source then resume
         debugPrint('[PlaybackController] playTrack: Playing from cache: $cachedPath');
-        await _player.stop();
-        await _player.play(DeviceFileSource(cachedPath));
+        await _player.setSource(DeviceFileSource(cachedPath));
+        await _player.resume();
         // Set now playing state immediately after playback starts
         _setNowPlaying(track);
         // Show notification (don't await, as it may fail on non-Android platforms)
@@ -375,12 +397,14 @@ class PlaybackController {
     
     if (!isMobile) {
       // For Linux, Windows, macOS, Web: download first, then play
-      await _player.stop();
+      debugPrint('[PlaybackController] playTrack: Downloading track ${track.id} before playback');
       // Download and cache synchronously before playing
       final downloadedPath = await _cache.downloadAndCache(track.id, streamUrl);
       final downloadedFile = File(downloadedPath);
       if (await downloadedFile.exists() && await downloadedFile.length() > 0) {
-        await _player.play(DeviceFileSource(downloadedPath));
+        debugPrint('[PlaybackController] playTrack: Download complete, playing from: $downloadedPath');
+        await _player.setSource(DeviceFileSource(downloadedPath));
+        await _player.resume();
         // Set now playing state immediately after playback starts
         _setNowPlaying(track);
         // Show notification (don't await, as it may fail on non-Android platforms)
@@ -388,14 +412,16 @@ class PlaybackController {
         return;
       } else {
         // Download failed, clean up and fall through to error
+        debugPrint('[PlaybackController] playTrack: Download failed, removing from cache');
         await _cache.removeFromCache(track.id);
         throw Exception('Downloaded file for ${track.id} is empty or invalid');
       }
     }
     
     // For Android and iOS: start streaming and download in background
-    await _player.stop();
-    await _player.play(UrlSource(streamUrl));
+    debugPrint('[PlaybackController] playTrack: Streaming from URL: $streamUrl');
+    await _player.setSource(UrlSource(streamUrl));
+    await _player.resume();
     // Set now playing state immediately after playback starts
     _setNowPlaying(track);
     // Show notification (may fail on some platforms, but don't let it block)
@@ -423,10 +449,13 @@ class PlaybackController {
   }
 
   Future<void> stop() async {
+    debugPrint('[PlaybackController] stop: Stopping playback');
     await _player.stop();
+    debugPrint('[PlaybackController] stop: Player stopped');
     // Hide notification (don't await, as it may fail on non-Android platforms)
     unawaited(_hideNotification());
     _setNowPlaying(null);
+    debugPrint('[PlaybackController] stop: Now playing set to null');
   }
 
   Future<void> _showNotification(MusicTrack track) async {

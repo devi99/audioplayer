@@ -1,12 +1,12 @@
-import '../services/music_library_api.dart';
-
 import '../components/now_playing_bar.dart' show NowPlayingBar;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
+import '../models/local_file_queue_item.dart';
 import '../screens/debug_screen.dart' show DebugScreen;
 
-import '../services/playback_controller.dart';
+import '../services/local_file_queue_manager.dart';
+import '../services/music_library_api.dart';
 import 'albums_browse_page.dart';
 import 'artists_browse_page.dart';
 import 'library_navigation_pane.dart';
@@ -81,14 +81,12 @@ class _LibraryScreenState extends State<LibraryScreen> {
             },
           ),
         ),
-        ValueListenableBuilder<NowPlayingState>(
-          valueListenable: PlaybackController.instance.nowPlaying,
-          builder: (context, nowPlayingState, _) {
-            final track = nowPlayingState.track;
-            if (track == null) {
-              return const SizedBox.shrink();
-            }
-            return NowPlayingBar(track: track, api: widget.api);
+        StreamBuilder<LocalFileQueueItem?>(
+          stream: LocalFileQueueManager.instance.onCurrentItemChanged,
+          initialData: null,
+          builder: (context, snapshot) {
+            // NowPlayingBar now manages its own state from the queue
+            return NowPlayingBar(api: widget.api);
           },
         ),
       ],
@@ -132,8 +130,8 @@ class _LibraryScreenState extends State<LibraryScreen> {
           label: '',
         ),
         BottomNavigationBarItem(
-          icon: Icon(Icons.play_circle_outline_rounded),
-          activeIcon: Icon(Icons.play_circle_rounded),
+          icon: Icon(Icons.filter_list_outlined),
+          activeIcon: Icon(Icons.filter_list_rounded),
           label: '',
         ),
         BottomNavigationBarItem(

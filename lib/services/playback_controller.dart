@@ -360,13 +360,17 @@ class PlaybackController {
   }) async {
     debugPrint('[PlaybackController] playTrack: START, track.id=${track.id}, track.title=${track.title}');
     
-    // Ensure clean player state by stopping current playback
+    // Always stop to ensure clean state - this prevents source conflicts
     debugPrint('[PlaybackController] playTrack: Stopping current playback');
-    await _player.stop();
-    debugPrint('[PlaybackController] playTrack: Player stopped');
+    try {
+      await _player.stop();
+      debugPrint('[PlaybackController] playTrack: Player stopped successfully');
+    } catch (e) {
+      debugPrint('[PlaybackController] playTrack: stop() error (may already be stopped): $e');
+    }
     
-    // Small delay to ensure player is in clean state before setting new source
-    // This is critical on Linux to prevent GStreamer errors from rapid source changes
+    // Delay to allow audioplayer to fully release the old source
+    // This prevents GStreamer errors on Linux when rapidly changing sources
     await Future.delayed(const Duration(milliseconds: 200));
     debugPrint('[PlaybackController] playTrack: Player state cleaned, proceeding with track ${track.id}');
     

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 /// Global storage for debug messages - cleared when app closes
 class DebugMessageStorage {
@@ -48,6 +49,20 @@ class _DebugScreenState extends State<DebugScreen> {
     return '${timestamp.hour.toString().padLeft(2, '0')}:${timestamp.minute.toString().padLeft(2, '0')}:${timestamp.second.toString().padLeft(2, '0')}';
   }
 
+  Future<void> _copyMessagesToClipboard(BuildContext context) async {
+    final allMessages = DebugMessageStorage.messages
+        .map((msg) => '[${_formatTime(msg.timestamp)}] ${msg.text}')
+        .join('\n');
+    if (allMessages.isNotEmpty) {
+      await Clipboard.setData(ClipboardData(text: allMessages));
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Debug messages copied to clipboard')),
+        );
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -56,6 +71,11 @@ class _DebugScreenState extends State<DebugScreen> {
       appBar: AppBar(
         title: const Text('Debug Console'),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.copy_rounded),
+            tooltip: 'Copy all messages to clipboard',
+            onPressed: () => _copyMessagesToClipboard(context),
+          ),
           IconButton(
             icon: const Icon(Icons.clear_rounded),
             tooltip: 'Clear all messages',

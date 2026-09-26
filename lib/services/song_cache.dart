@@ -26,14 +26,19 @@ class SongCache {
   }
 
   Future<String?> getCachedFilePath(String songId) async {
+    debugPrint('[SongCache] getCachedFilePath: songId=$songId');
+    
     // Check in-memory cache first
     if (_filePathCache.containsKey(songId)) {
       final cachedPath = _filePathCache[songId]!;
+      debugPrint('[SongCache] getCachedFilePath: found in memory cache, path=$cachedPath');
       final file = File(cachedPath);
       if (await file.exists()) {
+        debugPrint('[SongCache] getCachedFilePath: file exists, returning $cachedPath');
         return cachedPath;
       }
       // File doesn't exist, remove from cache
+      debugPrint('[SongCache] getCachedFilePath: file does not exist, removing from cache');
       _filePathCache.remove(songId);
     }
 
@@ -41,30 +46,39 @@ class SongCache {
     final cacheDir = await getCacheDirectory();
     final sanitizedSongId = _sanitizeFilename(songId);
     final filePath = path.join(cacheDir, '$sanitizedSongId.mp3');
+    debugPrint('[SongCache] getCachedFilePath: checking filesystem at $filePath');
     final file = File(filePath);
 
     if (await file.exists()) {
+      debugPrint('[SongCache] getCachedFilePath: file exists on filesystem, returning $filePath');
       // Update in-memory cache
       _filePathCache[songId] = filePath;
       return filePath;
     }
 
+    debugPrint('[SongCache] getCachedFilePath: file not found, returning null');
     return null;
   }
 
   Future<String> downloadAndCache(String songId, String streamUrl) async {
+    debugPrint('[SongCache] downloadAndCache: START, songId=$songId');
+    
     // Check if already downloading
     if (_downloadInProgress[songId] == true) {
+      debugPrint('[SongCache] downloadAndCache: already in progress for $songId, waiting...');
       // Wait for existing download to complete
       while (_downloadInProgress[songId] == true) {
         await Future.delayed(const Duration(milliseconds: 100));
       }
       
+      debugPrint('[SongCache] downloadAndCache: previous download completed, checking cache');
       // Check if download completed successfully
       final cachedPath = await getCachedFilePath(songId);
       if (cachedPath != null) {
+        debugPrint('[SongCache] downloadAndCache: found in cache, returning $cachedPath');
         return cachedPath;
       }
+      debugPrint('[SongCache] downloadAndCache: not in cache after waiting, will download');
     }
 
     // Limit concurrent downloads

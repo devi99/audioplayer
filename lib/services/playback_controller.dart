@@ -338,14 +338,22 @@ class PlaybackController {
     required MusicTrack track,
     required String streamUrl,
   }) async {
+    debugPrint('[PlaybackController] playTrack: START, track.id=${track.id}, track.title=${track.title}');
+    
     // Check if song is cached
     final cachedPath = await _cache.getCachedFilePath(track.id);
+    debugPrint('[PlaybackController] playTrack: cachedPath=$cachedPath');
     
     if (cachedPath != null) {
       // Verify cached file is valid (non-empty) before attempting to play
       final cachedFile = File(cachedPath);
-      if (await cachedFile.exists() && await cachedFile.length() > 0) {
+      final exists = await cachedFile.exists();
+      final length = await cachedFile.length();
+      debugPrint('[PlaybackController] playTrack: cached file exists=$exists, length=$length');
+      
+      if (exists && length > 0) {
         // Play from cache
+        debugPrint('[PlaybackController] playTrack: Playing from cache: $cachedPath');
         await _player.stop();
         await _player.play(DeviceFileSource(cachedPath));
         // Set now playing state immediately after playback starts

@@ -79,6 +79,7 @@ class PlaybackController {
   final YouTubeFallback _youtubeFallback = YouTubeFallback();
   final Set<String> _downloadingSongs = {};
   bool _isPlayingTrack = false;
+  bool _isTransitioningTrack = false;
 
   // Expose YouTube fallback for UI integration
   YouTubeFallback get youtubeFallback => _youtubeFallback;
@@ -359,8 +360,15 @@ class PlaybackController {
   }) async {
     debugPrint('[PlaybackController] playTrack: START, track.id=${track.id}, track.title=${track.title}');
     
-    // Stop any current playback and ensure clean state
+    // Ensure clean player state by stopping current playback
+    debugPrint('[PlaybackController] playTrack: Stopping current playback');
     await _player.stop();
+    debugPrint('[PlaybackController] playTrack: Player stopped');
+    
+    // Small delay to ensure player is in clean state before setting new source
+    // This is critical on Linux to prevent GStreamer errors from rapid source changes
+    await Future.delayed(const Duration(milliseconds: 200));
+    debugPrint('[PlaybackController] playTrack: Player state cleaned, proceeding with track ${track.id}');
     
     // Check if song is cached
     final cachedPath = await _cache.getCachedFilePath(track.id);

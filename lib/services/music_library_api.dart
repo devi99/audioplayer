@@ -4,6 +4,7 @@ import 'package:http/http.dart' as http;
 
 import '../models/library_entities.dart';
 import '../models/local_file_queue_item.dart';
+import '../models/mpd_queue_item.dart';
 import '../models/music_track.dart';
 import 'dart:async';
 
@@ -452,6 +453,120 @@ class MusicLibraryApi {
       return null;
     } else {
       throw Exception('Failed to fetch song by filePath (${response.statusCode})');
+    }
+  }
+
+  // Mpd API methods
+
+  /// Check whether the MPD server is reachable
+  Future<bool> fetchMpdConnected() async {
+    final response = await _client.get(_buildUri('/api/Mpd/ping'));
+    if (response.statusCode != 200) {
+      throw Exception('Failed to ping MPD (${response.statusCode})');
+    }
+    final decoded = jsonDecode(response.body);
+    return decoded is Map && decoded['connected'] == true;
+  }
+
+  /// Get the MPD playback status
+  Future<MpdStatus> fetchMpdStatus() async {
+    final response = await _client.get(_buildUri('/api/Mpd/status'));
+    if (response.statusCode != 200) {
+      throw Exception('Failed to load MPD status (${response.statusCode})');
+    }
+    return MpdStatus.fromJson(_decodeBody(response.body));
+  }
+
+  /// Get the current MPD queue
+  Future<List<MpdQueueItem>> fetchMpdQueue() async {
+    final response = await _client.get(_buildUri('/api/Mpd/queue'));
+    if (response.statusCode != 200) {
+      throw Exception('Failed to load MPD queue (${response.statusCode})');
+    }
+    final decoded = jsonDecode(response.body);
+    final items = decoded is List ? decoded : const <dynamic>[];
+    return items
+        .map((item) =>
+            MpdQueueItem.fromJson(Map<String, dynamic>.from(item as Map)))
+        .toList();
+  }
+
+  /// Get the currently playing song on MPD
+  Future<MpdQueueItem?> fetchMpdCurrentSong() async {
+    final response = await _client.get(_buildUri('/api/Mpd/current-song'));
+    if (response.statusCode != 200) {
+      throw Exception(
+          'Failed to load current MPD song (${response.statusCode})');
+    }
+    final decoded = jsonDecode(response.body);
+    if (decoded is! Map || decoded.isEmpty) {
+      return null;
+    }
+    return MpdQueueItem.fromJson(Map<String, dynamic>.from(decoded));
+  }
+
+  Future<void> mpdPlay() => _mpdPost('/api/Mpd/play');
+  Future<void> mpdPause() => _mpdPost('/api/Mpd/pause');
+  Future<void> mpdStop() => _mpdPost('/api/Mpd/stop');
+  Future<void> mpdNext() => _mpdPost('/api/Mpd/next');
+  Future<void> mpdPrevious() => _mpdPost('/api/Mpd/previous');
+
+  /// Clear the MPD queue
+  Future<void> clearMpdQueue() async {
+    final response = await _client.delete(_buildUri('/api/Mpd/clear-queue'));
+    // Accept 200 (OK) or 204 (No Content)
+    if (response.statusCode != 200 && response.statusCode != 204) {
+      throw Exception('Failed to clear MPD queue (${response.statusCode})');
+    }
+  }
+
+  /// Add a song to the MPD queue by its full file path
+  Future<void> addToMpdQueue(String fullFilePath) {
+    return _mpdPost('/api/Mpd/add-to-queue', fullFilePath: fullFilePath);
+  }
+
+  /// Play a song by its file path, outside of the queue
+  Future<void> playMpdFile(String fullFilePath) {
+    return _mpdPost('/api/Mpd/play-file', fullFilePath: fullFilePath);
+  }
+
+  /// Start playing a song that is already in the MPD queue
+  Future<void> playMpdFileInQueue(String fullFilePath) {
+    return _mpdPost('/api/Mpd/play-file-in-queue', fullFilePath: fullFilePath);
+  }
+
+  /// Search songs available on the MPD server
+  Future<List<MpdQueueItem>> searchMpdSongs({
+    required String artistName,
+    required String songTitle,
+  }) async {
+    final response = await _client.post(
+      _buildUri('/api/Mpd/search-songs'),
+      headers: const <String, String>{'Content-Type': 'application/json'},
+      body: jsonEncode(<String, dynamic>{
+        'artistName': artistName,
+        'songTitle': songTitle,
+      }),
+    );
+    if (response.statusCode != 200) {
+      throw Exception('Failed to search MPD songs (${response.statusCode})');
+    }
+    final decoded = jsonDecode(response.body);
+    final items = decoded is List ? decoded : const <dynamic>[];
+    return items
+        .map((item) =>
+            MpdQueueItem.fromJson(Map<String, dynamic>.from(item as Map)))
+        .toList();
+  }
+
+  Future<void> _mpdPost(String path, {String? fullFilePath}) async {
+    final response = await _client.post(
+      _buildUri(path),
+      headers: const <String, String>{'Content-Type': 'application/json'},
+      body: jsonEncode(<String, dynamic>{'fullFilePath': fullFilePath}),
+    );
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw Exception('Failed to call $path (${response.statusCode})');
     }
   }
 

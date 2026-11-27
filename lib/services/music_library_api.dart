@@ -16,15 +16,26 @@ class TagOption {
 }
 
 class MusicLibraryApi {
-  MusicLibraryApi(
-      {this.baseUrl = 'https://musiclibrary-api.dev.tarabora.eu',
-      http.Client? client})
-      : _client = client ?? http.Client();
+  MusicLibraryApi({
+    this.baseUrl = 'https://musiclibrary-api.dev.tarabora.eu',
+    String? apiKey,
+    http.Client? client,
+  })  : apiKey = apiKey ?? const String.fromEnvironment('API_KEY') {
+    final host = Uri.tryParse(baseUrl)?.host ?? '';
+    _client = _ApiKeyClient(client ?? http.Client(), host, this.apiKey);
+  }
 
   final String baseUrl;
-  final http.Client _client;
+  final String apiKey;
+  late final http.Client _client;
   final Map<String, Future<String?>> _artistImageCache = {};
   final Map<String, Future<String?>> _albumImageCache = {};
+
+  /// Headers that authenticate requests to the music library API.
+  Map<String, String> get authHeaders {
+    if (apiKey.isEmpty) return const <String, String>{};
+    return <String, String>{'X-Api-Key': apiKey};
+  }
 
   Future<List<ArtistSummary>> fetchArtists({int pageSize = 100}) {
     return _fetchAllPages(
@@ -322,8 +333,13 @@ class MusicLibraryApi {
     }
   }
 
+  Uri streamSingleTrackUri(int singleTrackId) {
+    return _buildUri('/api/MusicStream/stream/$singleTrackId',
+        queryParameters: _streamAuthParameters);
+  }
+
   String streamSingleTrackUrl(int singleTrackId) {
-    return _buildUri('/api/MusicStream/stream/$singleTrackId').toString();
+    return streamSingleTrackUri(singleTrackId).toString();
   }
 
   Future<List<String>> fetchSongTags(String songId) async {
@@ -422,8 +438,13 @@ class MusicLibraryApi {
     }
   }
 
+  Uri streamSongUri(String songId) {
+    return _buildUri('/api/MusicStream/stream/$songId',
+        queryParameters: _streamAuthParameters);
+  }
+
   String streamSongUrl(String songId) {
-    return _buildUri('/api/MusicStream/stream/$songId').toString();
+    return streamSongUri(songId).toString();
   }
 
   /// Stream a song directly by its file path
@@ -431,7 +452,10 @@ class MusicLibraryApi {
     // Try as query parameter - the API might accept this
     return _buildUri(
       '/api/MusicStream/stream',
-      queryParameters: {'filePath': filePath},
+      queryParameters: <String, String>{
+        'filePath': filePath,
+        ...?_streamAuthParameters,
+      },
     ).toString();
   }
 
@@ -787,6 +811,13 @@ class MusicLibraryApi {
     return Uri.parse('$root/$cleanPath').replace(queryParameters: queryParameters);
   }
 
+  /// Authentication parameters embedded in stream URLs, so that players
+  /// without header support (audioplayers UrlSource) can still authenticate.
+  Map<String, String>? get _streamAuthParameters {
+    if (apiKey.isEmpty) return null;
+    return <String, String>{'apiKey': apiKey};
+  }
+
   Future<Map<String, dynamic>> _getJson(
     String url, {
     Map<String, String>? queryParameters,
@@ -811,5 +842,31 @@ class MusicLibraryApi {
       return data;
     }
     return <String, dynamic>{};
+  }
+}
+
+/// HTTP client that attaches the API key header to every request sent to
+/// the music library API host. Requests to other hosts (Wikipedia,
+/// MusicBrainz) pass through untouched.
+class _ApiKeyClient extends http.BaseClient {
+  _ApiKeyClient(this._inner, this._apiHost, String apiKey)
+      : _apiKey = apiKey;
+
+  final http.Client _inner;
+  final String _apiHost;
+  final String _apiKey;
+
+  @override
+  Future<http.StreamedResponse> send(http.BaseRequest request) {
+    if (_apiKey.isNotEmpty && request.url.host == _apiHost) {
+      request.headers['X-Api-Key'] = _apiKey;
+    }
+    return _inner.send(request);
+  }
+
+  @override
+  void close() {
+    _inner.close();
+    super.close();
   }
 }

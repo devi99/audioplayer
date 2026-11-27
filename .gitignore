@@ -18,3 +18,7 @@ linux/x64/
 .DS_Store
 .idea/
 .vscode/
+
+# Secrets
+dart_defines.json
+*.env

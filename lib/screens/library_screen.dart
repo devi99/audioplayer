@@ -1,14 +1,17 @@
-import '../services/music_library_api.dart';
-
 import '../components/now_playing_bar.dart' show NowPlayingBar;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
-import '../services/playback_controller.dart';
+import '../models/local_file_queue_item.dart';
+import '../screens/debug_screen.dart' show DebugScreen;
+
+import '../services/local_file_queue_manager.dart';
+import '../services/music_library_api.dart';
 import 'albums_browse_page.dart';
 import 'artists_browse_page.dart';
 import 'library_navigation_pane.dart';
 import 'play_screen.dart';
+import 'queue_screen.dart';
 import 'songs_browse_page.dart';
 
 class LibraryScreen extends StatefulWidget {
@@ -68,17 +71,22 @@ class _LibraryScreenState extends State<LibraryScreen> {
                   key: const ValueKey('play'),
                   api: widget.api,
                 ),
+              LibrarySection.queue => QueueScreen(
+                  key: const ValueKey('queue'),
+                  api: widget.api,
+                ),
+              LibrarySection.debug => const DebugScreen(
+                  key: ValueKey('debug'),
+                ),
             },
           ),
         ),
-        ValueListenableBuilder<NowPlayingState>(
-          valueListenable: PlaybackController.instance.nowPlaying,
-          builder: (context, nowPlayingState, _) {
-            final track = nowPlayingState.track;
-            if (track == null) {
-              return const SizedBox.shrink();
-            }
-            return NowPlayingBar(track: track, api: widget.api);
+        StreamBuilder<LocalFileQueueItem?>(
+          stream: LocalFileQueueManager.instance.onCurrentItemChanged,
+          initialData: null,
+          builder: (context, snapshot) {
+            // NowPlayingBar now manages its own state from the queue
+            return NowPlayingBar(api: widget.api);
           },
         ),
       ],
@@ -122,8 +130,18 @@ class _LibraryScreenState extends State<LibraryScreen> {
           label: '',
         ),
         BottomNavigationBarItem(
-          icon: Icon(Icons.play_circle_outline_rounded),
-          activeIcon: Icon(Icons.play_circle_rounded),
+          icon: Icon(Icons.filter_list_outlined),
+          activeIcon: Icon(Icons.filter_list_rounded),
+          label: '',
+        ),
+        BottomNavigationBarItem(
+          icon: Icon(Icons.queue_music_outlined),
+          activeIcon: Icon(Icons.queue_music_rounded),
+          label: '',
+        ),
+        BottomNavigationBarItem(
+          icon: Icon(Icons.bug_report_outlined),
+          activeIcon: Icon(Icons.bug_report_rounded),
           label: '',
         ),
       ],
@@ -137,21 +155,25 @@ class _LibraryScreenState extends State<LibraryScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: DecoratedBox(
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: <Color>[
-              Color(0xFF09111D),
-              Color(0xFF0B1726),
-              Color(0xFF111826),
-            ],
+      body: Stack(
+        children: [
+          DecoratedBox(
+            decoration: const BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: <Color>[
+                  Color(0xFF09111D),
+                  Color(0xFF0B1726),
+                  Color(0xFF111826),
+                ],
+              ),
+            ),
+            child: SafeArea(
+              child: _isAndroid ? _buildContent() : _buildDesktopNavigation(),
+            ),
           ),
-        ),
-        child: SafeArea(
-          child: _isAndroid ? _buildContent() : _buildDesktopNavigation(),
-        ),
+        ],
       ),
       bottomNavigationBar: _isAndroid ? _buildAndroidBottomNav() : null,
     );

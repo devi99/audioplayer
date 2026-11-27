@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math';
 
 import 'package:flutter/material.dart';
 
@@ -28,6 +29,7 @@ class _SongsBrowsePageState extends State<SongsBrowsePage> with SongManagementMi
   String _searchQuery = '';
   List<MusicTrack> _searchResults = const <MusicTrack>[];
   bool _isSearching = false;
+  bool _isLoadingRandomSongs = false;
   Timer? _searchDebounceTimer;
 
   @override
@@ -38,6 +40,7 @@ class _SongsBrowsePageState extends State<SongsBrowsePage> with SongManagementMi
     super.initState();
     _songsFuture = api.fetchSongs(pageSize: 0);
     unawaited(primeTagsCatalog());
+    initFloatingYouTubePlayer();
     _songFieldController = TextEditingController(text: '');
     _songFieldFocusNode = FocusNode();
     _songFieldController.addListener(_onSearchTextChanged);
@@ -108,6 +111,61 @@ class _SongsBrowsePageState extends State<SongsBrowsePage> with SongManagementMi
     }
   }
 
+  Future<void> _fetchRandomUnrankedSongs() async {
+    setState(() {
+      _isLoadingRandomSongs = true;
+    });
+
+    try {
+      final allSongs = await api.fetchSongs(pageSize: 0);
+      if (!mounted) {
+        return;
+      }
+
+      final unrankedSongs = allSongs
+          .where((song) => song.rankOrder == -1 && song.tags.isEmpty)
+          .toList();
+
+      if (unrankedSongs.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('No unranked songs without tags found')),
+        );
+        setState(() {
+          _isLoadingRandomSongs = false;
+        });
+        return;
+      }
+
+      final random = Random();
+      final randomSongs = <MusicTrack>[];
+      final availableSongs = List<MusicTrack>.from(unrankedSongs);
+      
+      for (var i = 0; i < min(10, availableSongs.length); i++) {
+        final randomIndex = random.nextInt(availableSongs.length);
+        randomSongs.add(availableSongs.removeAt(randomIndex));
+      }
+
+      setState(() {
+        _searchResults = randomSongs;
+        _searchQuery = 'random-unranked';
+        _isLoadingRandomSongs = false;
+        _pageNumber = 1;
+      });
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+
+      setState(() {
+        _isLoadingRandomSongs = false;
+      });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to load random songs: $error')),
+      );
+    }
+  }
+
   void _loadPage(int nextPage) {
     setState(() {
       _pageNumber = nextPage;
@@ -155,8 +213,9 @@ class _SongsBrowsePageState extends State<SongsBrowsePage> with SongManagementMi
           });
         }
 
-        return Padding(
-          padding: const EdgeInsets.all(24),
+        return wrapWithYouTubeLoading(
+          Padding(
+            padding: const EdgeInsets.all(24),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: <Widget>[
@@ -169,43 +228,70 @@ class _SongsBrowsePageState extends State<SongsBrowsePage> with SongManagementMi
               Text(
                 _searchQuery.isEmpty
                     ? '${allSongs.length} songs in your library'
-                    : _searchQuery.length < 3
-                        ? 'Type at least 3 characters to search'
-                        : '${songs.length} songs matching "$_searchQuery"',
+                    : _searchQuery == 'random-unranked'
+                        ? '10 random unranked songs without tags'
+                        : _searchQuery.length < 3
+                            ? 'Type at least 3 characters to search'
+                            : '${songs.length} songs matching "$_searchQuery"',
                 style: theme.textTheme.bodyMedium
                     ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
               ),
               const SizedBox(height: 16),
-              TextField(
-                controller: _songFieldController,
-                focusNode: _songFieldFocusNode,
-                decoration: InputDecoration(
-                  labelText: 'Search song titles',
-                  prefixIcon: const Icon(Icons.search_rounded),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
+              Row(
+                children: <Widget>[
+                  Expanded(
+                    child: TextField(
+                      controller: _songFieldController,
+                      focusNode: _songFieldFocusNode,
+                      decoration: InputDecoration(
+                        labelText: 'Search song titles',
+                        prefixIcon: const Icon(Icons.search_rounded),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        suffixIcon: _isSearching
+                            ? Padding(
+                                padding: const EdgeInsets.all(12),
+                                child: SizedBox(
+                                  width: 16,
+                                  height: 16,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    color: theme.colorScheme.primary,
+                                  ),
+                                ),
+                              )
+                            : _searchQuery.isNotEmpty
+                                ? IconButton(
+                                    icon: const Icon(Icons.clear_rounded),
+                                    onPressed: () {
+                                      _songFieldController.clear();
+                                    },
+                                  )
+                                : null,
+                      ),
+                    ),
                   ),
-                  suffixIcon: _isSearching
-                      ? Padding(
-                          padding: const EdgeInsets.all(12),
-                          child: SizedBox(
-                            width: 16,
-                            height: 16,
+                  const SizedBox(width: 8),
+                  IconButton(
+                    icon: _isLoadingRandomSongs
+                        ? SizedBox(
+                            width: 24,
+                            height: 24,
                             child: CircularProgressIndicator(
                               strokeWidth: 2,
                               color: theme.colorScheme.primary,
                             ),
-                          ),
-                        )
-                      : _searchQuery.isNotEmpty
-                          ? IconButton(
-                              icon: const Icon(Icons.clear_rounded),
-                              onPressed: () {
-                                _songFieldController.clear();
-                              },
-                            )
-                          : null,
-                ),
+                          )
+                        : const Icon(Icons.casino_rounded),
+                    onPressed: _fetchRandomUnrankedSongs,
+                    tooltip: 'Get 10 random unranked songs',
+                    style: IconButton.styleFrom(
+                      backgroundColor: theme.colorScheme.surfaceContainerHighest,
+                      padding: const EdgeInsets.all(12),
+                    ),
+                  ),
+                ],
               ),
               const SizedBox(height: 16),
               if (songs.length > _pageSize)
@@ -273,19 +359,21 @@ class _SongsBrowsePageState extends State<SongsBrowsePage> with SongManagementMi
                       child: Row(
                         children: <Widget>[
                           IconButton(
-                            onPressed: hasStream ? () => playSong(song) : null,
+                            onPressed: () => playSongWithYouTubeFallback(song),
                             icon: Icon(
                               Icons.play_arrow_rounded,
                               color: theme.colorScheme.onPrimaryContainer,
                             ),
                             style: IconButton.styleFrom(
-                              backgroundColor: theme.colorScheme.primaryContainer,
+                              backgroundColor: hasStream
+                                  ? theme.colorScheme.primaryContainer
+                                  : Colors.red,
                               fixedSize: const Size(42, 42),
                               shape: RoundedRectangleBorder(
                                 borderRadius: BorderRadius.circular(12),
                               ),
                             ),
-                            tooltip: hasStream ? 'Play' : 'Unavailable',
+                            tooltip: hasStream ? 'Play' : 'Play from YouTube',
                           ),
                           const SizedBox(width: 12),
                           Expanded(
@@ -396,6 +484,7 @@ class _SongsBrowsePageState extends State<SongsBrowsePage> with SongManagementMi
               ),
             ],
           ),
+        ),
         );
       },
     );

@@ -5,9 +5,9 @@ import 'package:flutter/material.dart';
 import '../models/library_entities.dart';
 import '../models/music_track.dart';
 import '../services/music_library_api.dart';
-import '../services/playback_controller.dart';
 import 'album_songs_page.dart';
 import 'shared_library_widgets.dart';
+import 'song_management_mixin.dart';
 
 class ArtistAlbumsSongsPage extends StatefulWidget {
   const ArtistAlbumsSongsPage(
@@ -262,7 +262,7 @@ class _SingleTrackCard extends StatefulWidget {
   State<_SingleTrackCard> createState() => _SingleTrackCardState();
 }
 
-class _SingleTrackCardState extends State<_SingleTrackCard> {
+class _SingleTrackCardState extends State<_SingleTrackCard> with SongManagementMixin {
   bool isLoadingTags = false;
   bool isUpdatingTag = false;
   bool isUpdatingTier = false;
@@ -271,11 +271,15 @@ class _SingleTrackCardState extends State<_SingleTrackCard> {
   int? currentTier;
 
   @override
+  MusicLibraryApi get api => widget.api;
+
+  @override
   void initState() {
     super.initState();
     currentRankOrder = widget.singleTrack.rankOrder;
     currentTier = _getTierFromRankOrder(currentRankOrder);
     _loadTags();
+    initFloatingYouTubePlayer();
   }
 
   Future<void> _loadTags() async {
@@ -435,42 +439,18 @@ class _SingleTrackCardState extends State<_SingleTrackCard> {
   }
 
   Future<void> _playTrack() async {
-    final hasFilePath = (widget.singleTrack.localFilePath ?? '').trim().isNotEmpty;
-    if (!hasFilePath) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Unable to play "${widget.singleTrack.title}" — no stream is available.'),
-        ),
-      );
-      return;
-    }
+    final musicTrack = MusicTrack(
+      id: widget.singleTrack.id.toString(),
+      title: widget.singleTrack.title,
+      artist: widget.singleTrack.artistName,
+      album: '', // Empty album for single tracks
+      durationSeconds: 0, // Default duration
+      rankOrder: widget.singleTrack.rankOrder ?? -1.0,
+      tags: tags,
+      filePath: widget.singleTrack.localFilePath,
+    );
     
-    try {
-      final musicTrack = MusicTrack(
-        id: widget.singleTrack.id.toString(),
-        title: widget.singleTrack.title,
-        artist: widget.singleTrack.artistName,
-        album: '', // Empty album for single tracks
-        durationSeconds: 0, // Default duration
-        rankOrder: widget.singleTrack.rankOrder ?? -1.0,
-        tags: tags,
-        filePath: widget.singleTrack.localFilePath,
-      );
-      
-      final streamUrl = widget.api.streamSingleTrackUrl(widget.singleTrack.id);
-      await PlaybackController.instance.playTrack(
-        track: musicTrack,
-        streamUrl: streamUrl,
-      );
-    } catch (error) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Unable to play "${widget.singleTrack.title}". The stream is unavailable.'),
-        ),
-      );
-    }
+    await playSongWithYouTubeFallback(musicTrack);
   }
 
   @override
@@ -479,31 +459,34 @@ class _SingleTrackCardState extends State<_SingleTrackCard> {
     final hasFilePath = (widget.singleTrack.localFilePath ?? '').trim().isNotEmpty;
     final selectedTierLabel = currentTier == null ? 'Select rank' : 'Tier $currentTier';
 
-    return Container(
-      padding: const EdgeInsets.symmetric(
-        vertical: 12,
-        horizontal: 12,
-      ),
-      decoration: BoxDecoration(
-        color: theme.colorScheme.surface.withValues(alpha: 0.82),
-        borderRadius: BorderRadius.circular(16),
+    return wrapWithYouTubeLoading(
+      Container(
+        padding: const EdgeInsets.symmetric(
+          vertical: 12,
+          horizontal: 12,
+        ),
+        decoration: BoxDecoration(
+          color: theme.colorScheme.surface.withValues(alpha: 0.82),
+          borderRadius: BorderRadius.circular(16),
       ),
       child: Row(
         children: <Widget>[
           IconButton(
-            onPressed: hasFilePath ? _playTrack : null,
+            onPressed: _playTrack,
             icon: Icon(
               Icons.play_arrow_rounded,
               color: theme.colorScheme.onPrimaryContainer,
             ),
             style: IconButton.styleFrom(
-              backgroundColor: theme.colorScheme.primaryContainer,
+              backgroundColor: hasFilePath
+                  ? theme.colorScheme.primaryContainer
+                  : Colors.red,
               fixedSize: const Size(42, 42),
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(12),
               ),
             ),
-            tooltip: hasFilePath ? 'Play' : 'Unavailable',
+            tooltip: hasFilePath ? 'Play' : 'Play from YouTube',
           ),
           const SizedBox(width: 12),
           Expanded(
@@ -602,7 +585,8 @@ class _SingleTrackCardState extends State<_SingleTrackCard> {
           ),
         ],
       ),
-    );
+    ),
+  );
   }
 
   int? _getTierFromRankOrder(double? rankOrder) {

@@ -2,8 +2,11 @@ import 'package:flutter/material.dart';
 
 import 'screens/library_screen.dart';
 import 'services/music_library_api.dart';
+import 'screens/debug_screen.dart';
 
 void main() {
+  // Setup debug message capture at app startup
+  setupDebugMessageCapture();
   runApp(const AudioPlayerApp());
 }
 

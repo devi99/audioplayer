@@ -3,6 +3,8 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 
 import '../models/library_entities.dart';
+import '../models/local_file_queue_item.dart';
+import '../models/mpd_queue_item.dart';
 import '../models/music_track.dart';
 import 'dart:async';
 
@@ -114,6 +116,22 @@ class MusicLibraryApi {
         .sublist(
             startIndex, endIndex > tracks.length ? tracks.length : endIndex)
         .toList(growable: false);
+  }
+
+  /// Fetch all songs (all pages)
+  Future<List<MusicTrack>> fetchAllSongs() async {
+    final items = <MusicTrack>[];
+    var pageNumber = 1;
+    const pageSize = 1000; // Large page size to minimize requests
+
+    while (true) {
+      final page = await fetchSongs(pageNumber: pageNumber, pageSize: pageSize);
+      if (page.isEmpty) break;
+      items.addAll(page);
+      pageNumber++;
+    }
+
+    return items;
   }
 
   Future<List<MusicTrack>> fetchSearchSongTitles(String title) async {
@@ -406,6 +424,236 @@ class MusicLibraryApi {
 
   String streamSongUrl(String songId) {
     return _buildUri('/api/MusicStream/stream/$songId').toString();
+  }
+
+  /// Stream a song directly by its file path
+  String streamSongByPath(String filePath) {
+    // Try as query parameter - the API might accept this
+    return _buildUri(
+      '/api/MusicStream/stream',
+      queryParameters: {'filePath': filePath},
+    ).toString();
+  }
+
+  /// Fetch a song by its file path
+  Future<MusicTrack?> fetchSongByFilePath(String filePath) async {
+    final response = await _client.post(
+      _buildUri('/api/Songs/filepath'),
+      headers: const <String, String>{'Content-Type': 'application/json'},
+      body: jsonEncode(<String, dynamic>{'filePath': filePath}),
+    );
+    if (response.statusCode == 200) {
+      final decoded = jsonDecode(response.body);
+      if (decoded != null) {
+        return MusicTrack.fromJson(Map<String, dynamic>.from(decoded as Map));
+      }
+      return null;
+    } else if (response.statusCode == 404) {
+      // Song not found
+      return null;
+    } else {
+      throw Exception('Failed to fetch song by filePath (${response.statusCode})');
+    }
+  }
+
+  // Mpd API methods
+
+  /// Check whether the MPD server is reachable
+  Future<bool> fetchMpdConnected() async {
+    final response = await _client.get(_buildUri('/api/Mpd/ping'));
+    if (response.statusCode != 200) {
+      throw Exception('Failed to ping MPD (${response.statusCode})');
+    }
+    final decoded = jsonDecode(response.body);
+    return decoded is Map && decoded['connected'] == true;
+  }
+
+  /// Get the MPD playback status
+  Future<MpdStatus> fetchMpdStatus() async {
+    final response = await _client.get(_buildUri('/api/Mpd/status'));
+    if (response.statusCode != 200) {
+      throw Exception('Failed to load MPD status (${response.statusCode})');
+    }
+    return MpdStatus.fromJson(_decodeBody(response.body));
+  }
+
+  /// Get the current MPD queue
+  Future<List<MpdQueueItem>> fetchMpdQueue() async {
+    final response = await _client.get(_buildUri('/api/Mpd/queue'));
+    if (response.statusCode != 200) {
+      throw Exception('Failed to load MPD queue (${response.statusCode})');
+    }
+    final decoded = jsonDecode(response.body);
+    final items = decoded is List ? decoded : const <dynamic>[];
+    return items
+        .map((item) =>
+            MpdQueueItem.fromJson(Map<String, dynamic>.from(item as Map)))
+        .toList();
+  }
+
+  /// Get the currently playing song on MPD
+  Future<MpdQueueItem?> fetchMpdCurrentSong() async {
+    final response = await _client.get(_buildUri('/api/Mpd/current-song'));
+    if (response.statusCode != 200) {
+      throw Exception(
+          'Failed to load current MPD song (${response.statusCode})');
+    }
+    final decoded = jsonDecode(response.body);
+    if (decoded is! Map || decoded.isEmpty) {
+      return null;
+    }
+    return MpdQueueItem.fromJson(Map<String, dynamic>.from(decoded));
+  }
+
+  Future<void> mpdPlay() => _mpdPost('/api/Mpd/play');
+  Future<void> mpdPause() => _mpdPost('/api/Mpd/pause');
+  Future<void> mpdStop() => _mpdPost('/api/Mpd/stop');
+  Future<void> mpdNext() => _mpdPost('/api/Mpd/next');
+  Future<void> mpdPrevious() => _mpdPost('/api/Mpd/previous');
+
+  /// Clear the MPD queue
+  Future<void> clearMpdQueue() async {
+    final response = await _client.delete(_buildUri('/api/Mpd/clear-queue'));
+    // Accept 200 (OK) or 204 (No Content)
+    if (response.statusCode != 200 && response.statusCode != 204) {
+      throw Exception('Failed to clear MPD queue (${response.statusCode})');
+    }
+  }
+
+  /// Add a song to the MPD queue by its full file path
+  Future<void> addToMpdQueue(String fullFilePath) {
+    return _mpdPost('/api/Mpd/add-to-queue', fullFilePath: fullFilePath);
+  }
+
+  /// Play a song by its file path, outside of the queue
+  Future<void> playMpdFile(String fullFilePath) {
+    return _mpdPost('/api/Mpd/play-file', fullFilePath: fullFilePath);
+  }
+
+  /// Start playing a song that is already in the MPD queue
+  Future<void> playMpdFileInQueue(String fullFilePath) {
+    return _mpdPost('/api/Mpd/play-file-in-queue', fullFilePath: fullFilePath);
+  }
+
+  /// Search songs available on the MPD server
+  Future<List<MpdQueueItem>> searchMpdSongs({
+    required String artistName,
+    required String songTitle,
+  }) async {
+    final response = await _client.post(
+      _buildUri('/api/Mpd/search-songs'),
+      headers: const <String, String>{'Content-Type': 'application/json'},
+      body: jsonEncode(<String, dynamic>{
+        'artistName': artistName,
+        'songTitle': songTitle,
+      }),
+    );
+    if (response.statusCode != 200) {
+      throw Exception('Failed to search MPD songs (${response.statusCode})');
+    }
+    final decoded = jsonDecode(response.body);
+    final items = decoded is List ? decoded : const <dynamic>[];
+    return items
+        .map((item) =>
+            MpdQueueItem.fromJson(Map<String, dynamic>.from(item as Map)))
+        .toList();
+  }
+
+  Future<void> _mpdPost(String path, {String? fullFilePath}) async {
+    final response = await _client.post(
+      _buildUri(path),
+      headers: const <String, String>{'Content-Type': 'application/json'},
+      body: jsonEncode(<String, dynamic>{'fullFilePath': fullFilePath}),
+    );
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw Exception('Failed to call $path (${response.statusCode})');
+    }
+  }
+
+  // LocalFileQueue API methods
+
+  /// Get all items in the local file queue
+  Future<List<LocalFileQueueItem>> fetchLocalFileQueue() async {
+    final response = await _client.get(_buildUri('/api/LocalFileQueue'));
+    if (response.statusCode != 200) {
+      throw Exception('Failed to load local file queue (${response.statusCode})');
+    }
+    final decoded = jsonDecode(response.body);
+    final items = decoded is List ? decoded : const <dynamic>[];
+    return items
+        .map((item) => LocalFileQueueItem.fromJson(Map<String, dynamic>.from(item as Map)))
+        .toList();
+  }
+
+  /// Add a song to the local file queue
+  Future<LocalFileQueueItem> addToLocalFileQueue({
+    required String fullFilePath,
+    String? album,
+    String? artist,
+    String? title,
+  }) async {
+    final response = await _client.post(
+      _buildUri('/api/LocalFileQueue'),
+      headers: const <String, String>{'Content-Type': 'application/json'},
+      body: jsonEncode(<String, dynamic>{
+        'fullFilePath': fullFilePath,
+        'album': album,
+        'artist': artist,
+        'title': title,
+      }),
+    );
+    // Accept 200 (OK) or 201 (Created)
+    if (response.statusCode != 200 && response.statusCode != 201) {
+      throw Exception('Failed to add to local file queue (${response.statusCode})');
+    }
+    final decoded = jsonDecode(response.body);
+    return LocalFileQueueItem.fromJson(Map<String, dynamic>.from(decoded as Map));
+  }
+
+  /// Remove a song from the local file queue
+  Future<void> removeFromLocalFileQueue(int queueItemId) async {
+    final response = await _client.delete(
+      _buildUri('/api/LocalFileQueue/$queueItemId'),
+    );
+    // Accept 200 (OK) or 204 (No Content)
+    if (response.statusCode != 200 && response.statusCode != 204) {
+      throw Exception('Failed to remove from local file queue (${response.statusCode})');
+    }
+  }
+
+  /// Clear the local file queue
+  Future<void> clearLocalFileQueue() async {
+    final response = await _client.delete(
+      _buildUri('/api/LocalFileQueue/clear'),
+    );
+    // Accept 200 (OK) or 204 (No Content)
+    if (response.statusCode != 200 && response.statusCode != 204) {
+      throw Exception('Failed to clear local file queue (${response.statusCode})');
+    }
+  }
+
+  /// Set the currently playing song in the queue
+  Future<void> setLocalFileQueueCurrentlyPlaying(int queueItemId) async {
+    final response = await _client.post(
+      _buildUri('/api/LocalFileQueue/$queueItemId/play'),
+    );
+    // Accept 200 (OK) or 204 (No Content)
+    if (response.statusCode != 200 && response.statusCode != 204) {
+      throw Exception('Failed to set currently playing (${response.statusCode})');
+    }
+  }
+
+  /// Get the next song in the queue
+  Future<LocalFileQueueItem?> getNextLocalFileQueueTrack() async {
+    final response = await _client.get(_buildUri('/api/LocalFileQueue/next'));
+    if (response.statusCode != 200) {
+      return null;
+    }
+    final decoded = jsonDecode(response.body);
+    if (decoded == null) {
+      return null;
+    }
+    return LocalFileQueueItem.fromJson(Map<String, dynamic>.from(decoded as Map));
   }
 
   Future<String?> lookupArtistImage(String artistName) {

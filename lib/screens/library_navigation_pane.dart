@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 
 export 'library_navigation_pane.dart' show LibrarySection;
 
-enum LibrarySection { artists, albums, songs, play }
+enum LibrarySection { artists, albums, songs, play, queue, debug }
 
 class LibraryNavigationPane extends StatelessWidget {
   const LibraryNavigationPane({
@@ -114,10 +114,26 @@ class LibraryNavigationPane extends StatelessWidget {
           _NavigationItem(
             collapsed: collapsed,
             selected: selectedSection == LibrarySection.play,
-            icon: Icons.play_circle_outline_rounded,
-            selectedIcon: Icons.play_circle_rounded,
-            label: 'Play',
+            icon: Icons.filter_list_outlined,
+            selectedIcon: Icons.filter_list_rounded,
+            label: 'Filter',
             onTap: () => onSelectSection(LibrarySection.play),
+          ),
+          _NavigationItem(
+            collapsed: collapsed,
+            selected: selectedSection == LibrarySection.queue,
+            icon: Icons.queue_music_outlined,
+            selectedIcon: Icons.queue_music_rounded,
+            label: 'Queue',
+            onTap: () => onSelectSection(LibrarySection.queue),
+          ),
+          _NavigationItem(
+            collapsed: collapsed,
+            selected: selectedSection == LibrarySection.debug,
+            icon: Icons.bug_report_outlined,
+            selectedIcon: Icons.bug_report_rounded,
+            label: 'Debug',
+            onTap: () => onSelectSection(LibrarySection.debug),
           ),
           const Spacer(),
           _ResizeHandle(onDragUpdate: onResize),

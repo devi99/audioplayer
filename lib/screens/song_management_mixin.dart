@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:youtube_player_flutter/youtube_player_flutter.dart';
 
 import '../models/music_track.dart';
+import '../services/local_file_queue_manager.dart';
 import '../services/music_library_api.dart';
 import '../services/playback_controller.dart';
+import '../components/youtube_floating_player.dart';
 
 /// A mixin that provides shared song management functionality.
 ///
@@ -18,13 +21,18 @@ import '../services/playback_controller.dart';
 /// - addTagToSong(), setSongTier(), playSong()
 ///
 /// Usage:
-///   class _MyState extends State<MyWidget> with SongManagementMixin {
-///     @override
-///     MusicLibraryApi get api => widget.api;
-///   }
+/// ```dart
+/// class _MyState extends State<MyWidget> with SongManagementMixin {
+///   @override
+///   MusicLibraryApi get api => widget.api;
+/// }
+/// ```
 mixin SongManagementMixin<T extends StatefulWidget> on State<T> {
   // Abstract getter to access the API from the widget
   MusicLibraryApi get api;
+
+  // Queue manager instance
+  final LocalFileQueueManager _queueManager = LocalFileQueueManager.instance;
 
   // State for tags management
   List<TagOption> availableTags = const <TagOption>[];
@@ -34,6 +42,57 @@ mixin SongManagementMixin<T extends StatefulWidget> on State<T> {
   final Set<String> loadingTagsForSongIds = <String>{};
   final Map<String, List<String>> songTagsById = <String, List<String>>{};
   final Map<String, double> rankOrderBySongId = <String, double>{};
+
+  // YouTube fallback loading state
+  bool _isLoadingYouTubeFallback = false;
+
+  /// Returns true if YouTube fallback is currently loading
+  bool get isLoadingYouTubeFallback => _isLoadingYouTubeFallback;
+
+  @override
+  void initState() {
+    super.initState();
+    _queueManager.setApi(api);
+  }
+
+  /// Builds a loading indicator widget for YouTube fallback
+  /// Call this from your build method and include it in a Stack
+  Widget buildYouTubeLoadingIndicator() {
+    if (!_isLoadingYouTubeFallback) return const SizedBox.shrink();
+
+    return Center(
+      child: Card(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const SizedBox(
+                width: 24,
+                height: 24,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              ),
+              const SizedBox(width: 16),
+              Text(
+                'Searching YouTube (max 15s)...',
+                style: Theme.of(context).textTheme.bodyLarge,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Wraps a widget with a Stack that includes the YouTube loading indicator
+  Widget wrapWithYouTubeLoading(Widget child) {
+    return Stack(
+      children: [
+        child,
+        buildYouTubeLoadingIndicator(),
+      ],
+    );
+  }
 
   Future<void> primeTagsCatalog() async {
     try {
@@ -249,6 +308,119 @@ mixin SongManagementMixin<T extends StatefulWidget> on State<T> {
         ),
       );
     }
+  }
+
+  /// Play a song with YouTube fallback for tracks without local files.
+  /// If the song has a local file, adds it to the queue and plays if queue was empty.
+  /// If not, searches YouTube and plays from there directly (skipping stream attempt).
+  Future<void> playSongWithYouTubeFallback(MusicTrack song) async {
+    debugPrint('[SongManagementMixin] playSongWithYouTubeFallback: song.title=${song.title}, hasPlayableSource=${(song.filePath ?? '').trim().isNotEmpty}');
+    final hasPlayableSource = (song.filePath ?? '').trim().isNotEmpty;
+    
+    if (hasPlayableSource) {
+      // Song has a local file, add to queue and play if queue was empty
+      debugPrint('[SongManagementMixin] playSongWithYouTubeFallback: calling _queueManager.addAndPlayIfEmpty');
+      await _queueManager.addAndPlayIfEmpty(song);
+      debugPrint('[SongManagementMixin] playSongWithYouTubeFallback: addAndPlayIfEmpty complete');
+      return;
+    }
+    
+    // Song has no local file, go directly to YouTube fallback
+    debugPrint('[SongManagementMixin] playSongWithYouTubeFallback: no playable source, using YouTube fallback');
+    try {
+      await PlaybackController.instance.youtubeFallback.searchAndPlay(
+        song.artist,
+        song.title,
+      );
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Unable to play "${song.title}" from YouTube: $error'),
+        ),
+      );
+    }
+  }
+
+  /// Floating YouTube player state
+  YoutubePlayerController? _floatingPlayerController;
+  OverlayEntry? _floatingPlayerOverlay;
+
+  /// Initialize the floating YouTube player.
+  /// Call this in initState of your widget.
+  void initFloatingYouTubePlayer() {
+    final youtubeFallback = PlaybackController.instance.youtubeFallback;
+
+    // Set up floating player callback
+    youtubeFallback.setFloatingPlayerCallback(
+      (controller, title, onDismiss) {
+        _showFloatingPlayer(controller, title, onDismiss);
+      },
+    );
+
+    // Set up loading state callback
+    youtubeFallback.onLoadingChanged = (isLoading) {
+      if (mounted) {
+        setState(() => _isLoadingYouTubeFallback = isLoading);
+      }
+    };
+
+    // Set up error callback
+    youtubeFallback.onError = (message) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(message),
+            backgroundColor: Theme.of(context).colorScheme.error,
+          ),
+        );
+      }
+    };
+  }
+
+  /// Show the floating YouTube player.
+  void _showFloatingPlayer(
+    YoutubePlayerController controller,
+    String title,
+    VoidCallback onDismiss,
+  ) {
+    // Dismiss any existing player
+    _dismissFloatingPlayer();
+
+    _floatingPlayerController = controller;
+
+    final overlayState = Navigator.of(context).overlay!;
+    _floatingPlayerOverlay = OverlayEntry(
+      builder: (context) => YoutubeFloatingPlayer(
+        controller: controller,
+        videoTitle: title,
+        onDismiss: () {
+          onDismiss();
+          _dismissFloatingPlayer();
+        },
+        initialPosition: const Offset(20, 100),
+      ),
+    );
+
+    overlayState.insert(_floatingPlayerOverlay!);
+  }
+
+  /// Dismiss the floating YouTube player.
+  void _dismissFloatingPlayer() {
+    _floatingPlayerController?.pauseVideo();
+    _floatingPlayerController?.close();
+    _floatingPlayerController = null;
+    
+    if (_floatingPlayerOverlay != null) {
+      _floatingPlayerOverlay!.remove();
+      _floatingPlayerOverlay = null;
+    }
+  }
+
+  @override
+  void dispose() {
+    _dismissFloatingPlayer();
+    super.dispose();
   }
 }
 

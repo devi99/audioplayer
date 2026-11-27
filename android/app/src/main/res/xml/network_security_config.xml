@@ -6,6 +6,11 @@
         <domain includeSubdomains="true">en.wikipedia.org</domain>
         <domain includeSubdomains="true">musicbrainz.org</domain>
         <domain includeSubdomains="true">coverartarchive.org</domain>
+        <!-- Add YouTube domains -->
+        <domain includeSubdomains="true">youtube.com</domain>
+        <domain includeSubdomains="true">googlevideo.com</domain>
+        <domain includeSubdomains="true">ytimg.com</domain>
+        <domain includeSubdomains="true">googleapis.com</domain>        
     </domain-config>
     
     <!-- Allow cleartext traffic for development (remove in production) -->
